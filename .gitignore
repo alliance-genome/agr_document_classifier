@@ -5,3 +5,4 @@ htmlcov
 *.coverage.*
 .idea/*
 .vscode/*
+training_sets/*
