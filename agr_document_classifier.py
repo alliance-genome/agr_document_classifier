@@ -22,6 +22,7 @@ def extract_embeddings(model, document):
     doc_embedding = np.mean(embeddings, axis=0)
     return doc_embedding
 
+
 def train_classifier(embedding_model_path: str, training_data_dir: str, test_size: float):
     model = fasttext.load_model(embedding_model_path)
     classifier = MLPClassifier(hidden_layer_sizes=(512,), max_iter=500)
@@ -94,18 +95,23 @@ def classify_documents(embedding_model_path: str, classifier_model_path: str, in
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Classify documents or train document classifiers')
+    parser.add_argument("-m", "--mode", type=str, choices=['train', 'classify'], default="classify",
+                        help="Mode of operation: train or classify")
     parser.add_argument("-e", "--embedding_model_path", type=str, help="Path to the word embedding model")
-    parser.add_argument("-c", "--classifier_model_path", type=str, help="Path to the classifier model",
-                        required=False, default=None)
+    parser.add_argument("-c", "--classifier_model_path", type=str, help="Path to the classifier model")
     parser.add_argument("-i", "--input_docs_dir", type=str, help="Path to the input docs directory")
+    parser.add_argument("-t", "--test_size", type=float, help="Percentage of data used for testing",
+                        default=0.2)
 
     args = parser.parse_args()
-    if args.classifier_model_path:
+    if args.mode == "classify":
         classifications = classify_documents(embedding_model_path=args.embedding_model_path,
                                              classifier_model_path=args.classifier_model_path,
                                              input_docs_dir=args.input_docs_dir)
         print(classifications)
     else:
-        train_classifier(embedding_model_path=args.embedding_model_path, training_data_dir=args.input_docs_dir,
-                         test_size=0.4)
+        classifier, precision, recall, fscore = train_classifier(embedding_model_path=args.embedding_model_path,
+                                                                 training_data_dir=args.input_docs_dir,
+                                                                 test_size=0.4)
+        save_classifier(classifier=classifier, file_path=args.classifier_model_path)
 
