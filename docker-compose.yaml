@@ -1,0 +1,14 @@
+version: '3'
+services:
+  agr_document_classifier:
+    build: .
+    volumes:
+      - ${TRAINING_DIR}:/usr/src/app/training_docs
+      - ${CLASSIFICATION_DIR}:/usr/src/app/classification_docs
+      - ${EMBEDDING_MODEL_PATH}:/usr/src/app/embedding_model
+      - ${CLASSIFIERS_PATH}:/usr/src/app/classifiers
+    environment:
+      - EMBEDDING_MODEL_PATH=/usr/src/app/embedding_model
+      - CLASSIFY_DOCS_DIR=/usr/src/app/classification
+      - TRAINING_DOCS_DIR=/usr/src/app/training
+      - TEST_SIZE=${TEST_SIZE}

@@ -99,19 +99,22 @@ if __name__ == '__main__':
                         help="Mode of operation: train or classify")
     parser.add_argument("-e", "--embedding_model_path", type=str, help="Path to the word embedding model")
     parser.add_argument("-c", "--classifier_model_path", type=str, help="Path to the classifier model")
-    parser.add_argument("-i", "--input_docs_dir", type=str, help="Path to the input docs directory")
-    parser.add_argument("-t", "--test_size", type=float, help="Percentage of data used for testing",
+    parser.add_argument("-i", "--classify_docs_dir", type=str, help="Path to the docs to classify",
+                        required=False)
+    parser.add_argument("-t", "--training_docs_dir", type=str, help="Path to the docs to classify",
+                        required=False)
+    parser.add_argument("-s", "--test_size", type=float, help="Percentage of data used for testing",
                         default=0.2)
 
     args = parser.parse_args()
     if args.mode == "classify":
         classifications = classify_documents(embedding_model_path=args.embedding_model_path,
                                              classifier_model_path=args.classifier_model_path,
-                                             input_docs_dir=args.input_docs_dir)
+                                             input_docs_dir=args.classify_docs_dir)
         print(classifications)
     else:
         classifier, precision, recall, fscore = train_classifier(embedding_model_path=args.embedding_model_path,
-                                                                 training_data_dir=args.input_docs_dir,
-                                                                 test_size=0.4)
+                                                                 training_data_dir=args.training_docs_dir,
+                                                                 test_size=args.test_size)
         save_classifier(classifier=classifier, file_path=args.classifier_model_path)
 
