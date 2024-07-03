@@ -32,7 +32,8 @@ def extract_embeddings(model, document):
 
 def train_classifier(embedding_model_path: str, training_data_dir: str, test_size: float):
     model = fasttext.load_model(embedding_model_path)
-    classifier = MLPClassifier(hidden_layer_sizes=(512,), max_iter=500)
+    classifier = MLPClassifier(hidden_layer_sizes=(512,), max_iter=500, alpha=1e-4, early_stopping=True,
+                               validation_fraction=0.1)
 
     X = []
     y = []
@@ -40,11 +41,11 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, test_siz
     # Assume you have a function to get your training data
     # For each document in your training data, extract embeddings and labels
     for label in ["positive", "negative"]:
-        for document in get_documents(os.path.join(training_data_dir, label)):
-            doc_embedding = extract_embeddings(model, document)
-            X.append(doc_embedding)
-            y.append(label)
-
+        for document in get_documents(os.path.join(training_data_dir, label, "*")):
+            if document:
+                doc_embedding = extract_embeddings(model, document)
+                X.append(doc_embedding)
+                y.append(label)
     # Convert lists to numpy arrays
     X = np.array(X)
     y = np.array(y)
@@ -78,27 +79,31 @@ def get_documents(input_docs_dir: str):
     for file_path in glob.glob(input_docs_dir):
         file_obj = Path(file_path)
         with file_obj.open("rb") as fin:
-            if file_path.endswith(".pdf"):
-                if client is None:
-                    client = Client(base_url=os.environ.get("GROBID_API_URL"), timeout=1000, verify_ssl=False)
-                logger.info("Started pdf to TEI conversion")
-                form = ProcessForm(
-                    segment_sentences="1",
-                    input_=File(file_name=file_obj.name, payload=fin, mime_type="application/pdf"))
-                r = process_fulltext_document.sync_detailed(client=client, multipart_data=form)
-                file_stream = r.content
-            else:
-                file_stream = fin
-            article: Article = TEI.parse(file_stream, figures=True)
-            sentences = [re.sub('<[^<]+>', '', sentence.text) for section in article.sections for paragraph
-                         in section.paragraphs for sentence in paragraph if not sentence.text.isdigit() and
-                         not (
-                                 len(section.paragraphs) == 3 and
-                                 section.paragraphs[0][0].text in ['\n', ' '] and
-                                 section.paragraphs[-1][0].text in ['\n', ' ']
-                         )]
-            sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
-            return " ".join(sentences)
+            try:
+                if file_path.endswith(".pdf"):
+                    if client is None:
+                        client = Client(base_url=os.environ.get("GROBID_API_URL"), timeout=1000, verify_ssl=False)
+                    logger.info("Started pdf to TEI conversion")
+                    form = ProcessForm(
+                        segment_sentences="1",
+                        input_=File(file_name=file_obj.name, payload=fin, mime_type="application/pdf"))
+                    r = process_fulltext_document.sync_detailed(client=client, multipart_data=form)
+                    file_stream = r.content
+                else:
+                    file_stream = fin
+                article: Article = TEI.parse(file_stream, figures=True)
+                sentences = [re.sub('<[^<]+>', '', sentence.text) for section in article.sections for paragraph
+                             in section.paragraphs for sentence in paragraph if not sentence.text.isdigit() and
+                             not (
+                                     len(section.paragraphs) == 3 and
+                                     section.paragraphs[0][0].text in ['\n', ' '] and
+                                     section.paragraphs[-1][0].text in ['\n', ' ']
+                             )]
+                sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
+            except Exception as e:
+                logging.error(str(e))
+                sentences = []
+            yield " ".join(sentences)
 
 
 def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):

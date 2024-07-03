@@ -3,8 +3,8 @@ services:
   agr_document_classifier:
     build: .
     volumes:
-      - ${TRAINING_DIR}:/usr/src/app/training_docs
-      - ${CLASSIFICATION_DIR}:/usr/src/app/classification_docs
+      - ${TRAINING_DIR}:/usr/src/app/training
+      - ${CLASSIFICATION_DIR}:/usr/src/app/classification
       - ${EMBEDDING_MODEL_PATH}:/usr/src/app/embedding_model
       - ${CLASSIFIERS_PATH}:/usr/src/app/classifiers
     environment:
