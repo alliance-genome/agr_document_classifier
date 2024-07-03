@@ -13,7 +13,6 @@ from grobid_client.api.pdf import process_fulltext_document
 from grobid_client.models import Article, ProcessForm
 from grobid_client.types import TEI, File
 from joblib import dump, load
-from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import cross_validate, GridSearchCV
 from sklearn.svm import SVC
 
