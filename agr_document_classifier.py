@@ -1,17 +1,24 @@
 import argparse
 import glob
+import logging
 import os
 import os.path
 import re
+from pathlib import Path
 
 import fasttext
 import numpy as np
-from grobid_client.models import Article
-from grobid_client.types import TEI
+from grobid_client import Client
+from grobid_client.api.pdf import process_fulltext_document
+from grobid_client.models import Article, ProcessForm
+from grobid_client.types import TEI, File
 from joblib import dump, load
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.model_selection import train_test_split
 from sklearn.neural_network import MLPClassifier
+
+
+logger = logging.getLogger(__name__)
 
 
 def extract_embeddings(model, document):
@@ -67,9 +74,22 @@ def load_classifier(file_path):
 
 
 def get_documents(input_docs_dir: str):
+    client = None
     for file_path in glob.glob(input_docs_dir):
-        with open(file_path, "rb") as fin:
-            article: Article = TEI.parse(fin, figures=True)
+        file_obj = Path(file_path)
+        with file_obj.open("rb") as fin:
+            if file_path.endswith(".pdf"):
+                if client is None:
+                    client = Client(base_url=os.environ.get("GROBID_API_URL"), timeout=1000, verify_ssl=False)
+                logger.info("Started pdf to TEI conversion")
+                form = ProcessForm(
+                    segment_sentences="1",
+                    input_=File(file_name=file_obj.name, payload=fin, mime_type="application/pdf"))
+                r = process_fulltext_document.sync_detailed(client=client, multipart_data=form)
+                file_stream = r.content
+            else:
+                file_stream = fin
+            article: Article = TEI.parse(file_stream, figures=True)
             sentences = [re.sub('<[^<]+>', '', sentence.text) for section in article.sections for paragraph
                          in section.paragraphs for sentence in paragraph if not sentence.text.isdigit() and
                          not (
@@ -117,4 +137,5 @@ if __name__ == '__main__':
                                                                  training_data_dir=args.training_docs_dir,
                                                                  test_size=args.test_size)
         save_classifier(classifier=classifier, file_path=args.classifier_model_path)
+        print(f"Precision: {str(precision)}, Recall: {str(recall)}, F1 score: {str(fscore)}")
 

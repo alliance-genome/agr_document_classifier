@@ -12,3 +12,4 @@ services:
       - CLASSIFY_DOCS_DIR=/usr/src/app/classification
       - TRAINING_DOCS_DIR=/usr/src/app/training
       - TEST_SIZE=${TEST_SIZE}
+      - GROBID_API_URL=${GROBID_API_URL}
