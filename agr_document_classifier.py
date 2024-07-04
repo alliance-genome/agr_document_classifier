@@ -13,10 +13,69 @@ from grobid_client.api.pdf import process_fulltext_document
 from grobid_client.models import Article, ProcessForm
 from grobid_client.types import TEI, File
 from joblib import dump, load
-from sklearn.model_selection import cross_validate, GridSearchCV
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
+from xgboost import XGBClassifier
+from sklearn.model_selection import cross_validate, GridSearchCV
 
 logger = logging.getLogger(__name__)
+
+
+POSSIBLE_CLASSIFIERS = {
+    'LogisticRegression': {
+        'model': LogisticRegression(random_state=42),
+        'params': {
+            'C': [0.01, 0.1, 1, 10, 100],
+            'solver': ['liblinear', 'saga']
+        }
+    },
+    'RandomForestClassifier': {
+        'model': RandomForestClassifier(random_state=42),
+        'params': {
+            'n_estimators': [50, 100, 200],
+            'max_depth': [None, 10, 20, 30],
+            'min_samples_split': [2, 5, 10]
+        }
+    },
+    'GradientBoostingClassifier': {
+        'model': GradientBoostingClassifier(random_state=42),
+        'params': {
+            'n_estimators': [50, 100, 200],
+            'learning_rate': [0.01, 0.1, 0.2, 0.3],
+            'max_depth': [3, 4, 5, 6, 7]
+        }
+    },
+    'XGBClassifier': {
+        'model': XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss'),
+        'params': {
+            'n_estimators': [50, 100, 200],
+            'learning_rate': [0.01, 0.1, 0.2, 0.3],
+            'max_depth': [3, 4, 5, 6, 7]
+        }
+    },
+    'MLPClassifier': {
+        'model': MLPClassifier(max_iter=1000),
+        'params': {
+            'hidden_layer_sizes': [(50,), (100,), (50, 50), (100, 100)],
+            'activation': ['tanh', 'relu'],
+            'solver': ['sgd', 'adam'],
+            'alpha': [0.0001, 0.001, 0.01, 0.1],
+            'learning_rate_init': [0.001, 0.01, 0.1]
+        }
+    },
+    'SVC': {
+        'model': SVC(),
+        'params': {
+            'C': [0.1, 1, 10, 100, 1000],
+            'kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
+            'gamma': ['scale', 'auto', 0.001, 0.0001],
+            'degree': [2, 3, 4, 5],  # Only used if kernel is 'poly'
+            'coef0': [0.0, 0.1, 0.5, 1.0]  # Independent term in kernel function. It is only significant in 'poly' and 'sigmoid'.
+        }
+    }
+}
 
 
 def extract_embeddings(model, document):
@@ -36,47 +95,46 @@ def load_embedding_model(model_path):
 
 
 def train_classifier(embedding_model_path: str, training_data_dir: str, test_size: float):
-    model = load_embedding_model(model_path=embedding_model_path)
-    classifier = SVC(random_state=42)
+    embedding_model = load_embedding_model(model_path=embedding_model_path)
 
     X = []
     y = []
 
     # Assume you have a function to get your training data
     # For each document in your training data, extract embeddings and labels
+    logger.info("Loading training set.")
     for label in ["positive", "negative"]:
         for document in get_documents(os.path.join(training_data_dir, label, "*")):
             if document:
-                doc_embedding = extract_embeddings(model, document)
+                doc_embedding = extract_embeddings(embedding_model, document)
                 X.append(doc_embedding)
                 y.append(int(label == "positive"))
+    logger.info("Finished loading training set.")
 
     # Convert lists to numpy arrays
     X = np.array(X)
     y = np.array(y)
 
-    # Define the parameter grid to search
-    param_grid = {
-        'C': [0.1, 1, 10, 100],
-        'kernel': ['linear', 'rbf', 'poly'],
-        'gamma': ['scale', 'auto'],
-        'degree': [3, 4, 5]  # Only used for 'poly' kernel
-    }
+    best_score = 0
+    best_classifier = None
+    best_params = None
+    best_classifier_name = ""
 
-    # Define the parameter grid to search
+    logger.info("Starting model selection with grid search hyperparameter optimization and cross-validation.")
+    # Iterate over classifiers and perform grid search
+    for classifier_name, classifier_info in POSSIBLE_CLASSIFIERS.items():
+        logger.info(f"Evaluating model {classifier_name}.")
+        grid_search = GridSearchCV(estimator=classifier_info['model'], param_grid=classifier_info['params'], cv=5,
+                                   scoring='f1', verbose=1, n_jobs=-1)
+        grid_search.fit(X, y)
 
-    # Initialize the grid search
-    grid_search = GridSearchCV(estimator=classifier, param_grid=param_grid, cv=5, scoring='f1', verbose=1, n_jobs=-1)
+        if grid_search.best_score_ > best_score:
+            best_score = grid_search.best_score_
+            best_classifier = grid_search.best_estimator_
+            best_params = grid_search.best_params_
+            best_classifier_name = classifier_name
 
-    # Perform the grid search on the data
-    grid_search.fit(X, y)
-
-    # Get the best parameters and the best score
-    best_params = grid_search.best_params_
-
-    # Train the final model on the entire dataset using the best parameters
-    best_classifier = SVC(**best_params, random_state=42).fit(X, y)
-
+    logger.info(f"Selected model {best_classifier_name}.")
     # Define the number of folds for cross-validation
     k_folds = 5
 
@@ -90,10 +148,10 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, test_siz
     average_fscore = cross_val_results['test_f1'].mean()
 
     # Train the final model on the entire dataset
-    final_classifier = classifier.fit(X, y)
+    final_classifier = best_classifier.fit(X, y)
 
     # Return the trained model and performance metrics
-    return final_classifier, average_precision, average_recall, average_fscore
+    return final_classifier, average_precision, average_recall, average_fscore, best_classifier_name, best_params
 
 
 def save_classifier(classifier, file_path):
@@ -161,17 +219,24 @@ if __name__ == '__main__':
                         required=False)
     parser.add_argument("-s", "--test_size", type=float, help="Percentage of data used for testing",
                         default=0.2)
+    parser.add_argument("-l", "--log_level", type=str,
+                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+                        default='INFO', help="Set the logging level")
 
     args = parser.parse_args()
+
+    logging.basicConfig(level=getattr(logging, args.log_level.upper(), 0))
+
     if args.mode == "classify":
         classifications = classify_documents(embedding_model_path=args.embedding_model_path,
                                              classifier_model_path=args.classifier_model_path,
                                              input_docs_dir=args.classify_docs_dir)
         print(classifications)
     else:
-        classifier, precision, recall, fscore = train_classifier(embedding_model_path=args.embedding_model_path,
-                                                                 training_data_dir=args.training_docs_dir,
-                                                                 test_size=args.test_size)
+        classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
+            embedding_model_path=args.embedding_model_path, training_data_dir=args.training_docs_dir,
+            test_size=args.test_size)
         save_classifier(classifier=classifier, file_path=args.classifier_model_path)
-        print(f"Precision: {str(precision)}, Recall: {str(recall)}, F1 score: {str(fscore)}")
+        print(f"Selected Model: {classifier_name}, Parameters {classifier_params}, "
+              f"Precision: {str(precision)}, Recall: {str(recall)}, F1 score: {str(fscore)}")
 
