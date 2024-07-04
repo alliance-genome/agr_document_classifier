@@ -6,3 +6,4 @@ htmlcov
 .idea/*
 .vscode/*
 training_sets/*
+stats.txt

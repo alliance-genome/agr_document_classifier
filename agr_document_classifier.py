@@ -5,20 +5,28 @@ import os
 import os.path
 import re
 from pathlib import Path
+from typing import Tuple
 
 import fasttext
+import nltk
 import numpy as np
 from grobid_client import Client
 from grobid_client.api.pdf import process_fulltext_document
 from grobid_client.models import Article, ProcessForm
 from grobid_client.types import TEI, File
 from joblib import dump, load
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import cross_validate, GridSearchCV
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
-from sklearn.model_selection import cross_validate, GridSearchCV
+
+nltk.download('stopwords')
+nltk.download('punkt')
+
 
 logger = logging.getLogger(__name__)
 
@@ -104,10 +112,14 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, test_siz
     # For each document in your training data, extract embeddings and labels
     logger.info("Loading training set.")
     for label in ["positive", "negative"]:
-        for document in get_documents(os.path.join(training_data_dir, label, "*")):
-            if document:
-                doc_embedding = extract_embeddings(embedding_model, document)
-                X.append(doc_embedding)
+        for fulltext, title, abstract in get_documents(os.path.join(training_data_dir, label, "*")):
+            if fulltext:
+                fulltext = remove_stopwords(fulltext)
+                fulltext_embedding = extract_embeddings(embedding_model, fulltext)
+                # title_embedding = extract_embeddings(embedding_model, title)
+                # abstract_embedding = extract_embeddings(embedding_model, abstract)
+                # combined_embedding = np.concatenate([fulltext_embedding, title_embedding], axis=0)
+                X.append(fulltext_embedding)
                 y.append(int(label == "positive"))
     logger.info("Finished loading training set.")
 
@@ -162,7 +174,28 @@ def load_classifier(file_path):
     return load(file_path)
 
 
-def get_documents(input_docs_dir: str):
+def get_sentences_from_tei_section(section):
+    sentences = []
+    for paragraph in section.paragraphs:
+        for sentence in paragraph:
+            if not sentence.text.isdigit() and not (
+                    len(section.paragraphs) == 3 and
+                    section.paragraphs[0][0].text in ['\n', ' '] and
+                    section.paragraphs[-1][0].text in ['\n', ' ']
+            ):
+                sentences.append(re.sub('<[^<]+>', '', sentence.text))
+    sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
+    return sentences
+
+
+def remove_stopwords(text):
+    stop_words = set(stopwords.words('english'))
+    word_tokens = word_tokenize(text)
+    filtered_text = [word for word in word_tokens if word not in stop_words]
+    return ' '.join(filtered_text)
+
+
+def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
     client = None
     for file_path in glob.glob(input_docs_dir):
         file_obj = Path(file_path)
@@ -181,18 +214,18 @@ def get_documents(input_docs_dir: str):
                     else:
                         file_stream = fin
                     article: Article = TEI.parse(file_stream, figures=True)
-                    sentences = [re.sub('<[^<]+>', '', sentence.text) for section in article.sections for paragraph
-                                 in section.paragraphs for sentence in paragraph if not sentence.text.isdigit() and
-                                 not (
-                                         len(section.paragraphs) == 3 and
-                                         section.paragraphs[0][0].text in ['\n', ' '] and
-                                         section.paragraphs[-1][0].text in ['\n', ' ']
-                                 )]
-                    sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
+                    sentences = []
+                    for section in article.sections:
+                        sentences.extend(get_sentences_from_tei_section(section))
+                    abstract = ""
+                    for section in article.sections:
+                        if section.name == "ABSTRACT":
+                            abstract = " ".join(get_sentences_from_tei_section(section))
+                            break
+                    yield " ".join(sentences), article.title, abstract
                 except Exception as e:
                     logging.error(str(e))
                     continue
-                yield " ".join(sentences)
 
 
 def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
