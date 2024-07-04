@@ -3,6 +3,7 @@ attrs==21.4.0
 beautifulsoup4==4.12.3
 certifi==2024.7.4
 click==8.1.7
+fasttext==0.9.3
 grobid-client==0.8.8
 h11==0.12.0
 httpcore==0.15.0
@@ -13,6 +14,7 @@ lxml==4.9.4
 nltk==3.8.1
 numpy==2.0.0
 nvidia-nccl-cu12==2.22.3
+pybind11==2.13.1
 python-dateutil==2.9.0.post0
 regex==2024.5.15
 rfc3986==1.5.0
