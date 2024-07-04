@@ -24,6 +24,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
 
+
 nltk.download('stopwords')
 nltk.download('punkt')
 
@@ -113,15 +114,14 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, test_siz
     logger.info("Loading training set.")
     for label in ["positive", "negative"]:
         for fulltext, title, abstract in get_documents(os.path.join(training_data_dir, label, "*")):
-            if fulltext:
-                fulltext = remove_stopwords(fulltext)
-                fulltext_embedding = extract_embeddings(embedding_model, fulltext)
-                # title_embedding = extract_embeddings(embedding_model, title)
-                # abstract_embedding = extract_embeddings(embedding_model, abstract)
-                # combined_embedding = np.concatenate([fulltext_embedding, title_embedding], axis=0)
-                X.append(fulltext_embedding)
+            text = abstract
+            if text:
+                text = remove_stopwords(text)
+                text_embedding = extract_embeddings(embedding_model, text)
+                X.append(text_embedding)
                 y.append(int(label == "positive"))
     logger.info("Finished loading training set.")
+    logger.info(f"Dataset size: {str(len(X))}")
 
     # Convert lists to numpy arrays
     X = np.array(X)
