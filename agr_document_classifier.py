@@ -17,75 +17,15 @@ from grobid_client.types import TEI, File
 from joblib import dump, load
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from scipy.stats import loguniform, expon, randint, uniform
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_validate, RandomizedSearchCV
-from sklearn.neural_network import MLPClassifier
-from sklearn.svm import SVC
-from xgboost import XGBClassifier
+
+from models import POSSIBLE_CLASSIFIERS
 
 nltk.download('stopwords')
 nltk.download('punkt')
 
 
 logger = logging.getLogger(__name__)
-
-
-POSSIBLE_CLASSIFIERS = {
-    'LogisticRegression': {
-        'model': LogisticRegression(random_state=42, max_iter=1000),
-        'params': {
-            'C': expon(scale=100),
-            'solver': ['liblinear', 'saga']
-        }
-    },
-    'RandomForestClassifier': {
-        'model': RandomForestClassifier(random_state=42),
-        'params': {
-            'n_estimators': randint(5, 500),
-            'max_depth': list(range(2, 10, 2)),
-            'min_samples_split': randint(2, 20)
-        }
-    },
-    'GradientBoostingClassifier': {
-        'model': GradientBoostingClassifier(random_state=42),
-        'params': {
-            'n_estimators': randint(10, 200),
-            'learning_rate': loguniform(0.01, 0.5),
-            'max_depth': list(range(2, 10, 2))
-        }
-    },
-    'XGBClassifier': {
-        'model': XGBClassifier(random_state=42, eval_metric='logloss'),
-        'params': {
-            'n_estimators': randint(10, 200),
-            'learning_rate': loguniform(0.01, 0.5),
-            'max_depth': list(range(2, 10, 2))
-        }
-    },
-    'MLPClassifier': {
-        'model': MLPClassifier(max_iter=1000),
-        'params': {
-            'hidden_layer_sizes': [(50,), (100,), (500,), (50, 50), (100, 100), (500, 500), (50, 50, 50),
-                                   (100, 100, 100), (500, 500, 500)],
-            'activation': ['tanh', 'relu'],
-            'solver': ['sgd', 'adam'],
-            'alpha': loguniform(1e-4, 1e-1),
-            'learning_rate_init': loguniform(1e-3, 1e-1)
-        }
-    },
-    'SVC': {
-        'model': SVC(probability=True),
-        'params': {
-            'C': expon(scale=100),
-            'kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
-            'gamma': ['scale', 'auto'] + list(expon(scale=.001).rvs(100)),
-            'degree': list(range(1, 10)),  # Only used if kernel is 'poly'
-            'coef0': uniform(0.0, 1.0)  # Independent term in kernel function. Used in 'poly' and 'sigmoid'.
-        }
-    }
-}
 
 
 def get_document_embedding(model, document):
@@ -275,6 +215,6 @@ if __name__ == '__main__':
         classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
             embedding_model_path=args.embedding_model_path, training_data_dir=args.training_docs_dir)
         save_classifier(classifier=classifier, file_path=args.classifier_model_path)
-        print(f"Selected Model: {classifier_name}, Parameters {classifier_params}, "
-              f"Precision: {str(precision)}, Recall: {str(recall)}, F1 score: {str(fscore)}")
+        print(f"Selected Model: {classifier_name}, Precision: {str(precision)}, Recall: {str(recall)}, "
+              f"F1 score: {str(fscore)}, Fitted Parameters {classifier_params}")
 
