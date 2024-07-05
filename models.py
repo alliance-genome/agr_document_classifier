@@ -13,26 +13,30 @@ POSSIBLE_CLASSIFIERS = {
         'params': {
             'C': loguniform(1e-4, 1e+4),
             'solver': ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga'],
-            'penalty': ['l1', 'l2', 'elasticnet', 'none'],
+            'penalty': ['l2', None],
             'class_weight': [None, 'balanced'],
             'l1_ratio': np.linspace(0, 1, 10),
-            'multi_class': ['auto', 'ovr', 'multinomial'],
             'warm_start': [True, False]
         }
     },
     'RandomForestClassifier': {
         'model': RandomForestClassifier(random_state=42),
         'params': {
-            'n_estimators': randint(5, 500),
-            'max_depth': list(range(2, 10, 2)),
-            'min_samples_split': randint(2, 20)
+            'n_estimators': randint(5, 1000),
+            'max_depth': list(range(2, 20, 2)),
+            'min_samples_split': randint(2, 50),
+            'min_samples_leaf': randint(1, 20),
+            'max_features': list(range(1, 100)) + ['sqrt', 'log2', None],
+            'criterion': ['gini', 'entropy'],
+            'min_impurity_decrease': np.linspace(0.0, 0.1, 10),
+            'bootstrap': [True, False]
         }
     },
     'GradientBoostingClassifier': {
         'model': GradientBoostingClassifier(random_state=42),
         'params': {
             'n_estimators': randint(10, 200),
-            'learning_rate': loguniform(0.01, 0.5),
+            'learning_rate': loguniform(0.05, 1),
             'max_depth': list(range(2, 10, 2))
         }
     },
