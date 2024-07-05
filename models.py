@@ -2,7 +2,6 @@ import numpy as np
 from scipy.stats import loguniform, expon, randint, uniform
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression, SGDClassifier, Perceptron
-from sklearn.naive_bayes import MultinomialNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
@@ -59,7 +58,7 @@ POSSIBLE_CLASSIFIERS = {
                                    (50, 50, 50), (100, 100, 100), (500, 500, 500),
                                    (50, 100, 50), (100, 500, 100), (500, 100, 500)],
             'activation': ['tanh', 'relu', 'logistic', 'identity'],
-            'solver': ['sgd', 'adam', 'lbfgs'],
+            'solver': ['sgd', 'adam'],
             'alpha': loguniform(1e-5, 1e-1),
             'learning_rate': ['constant', 'invscaling', 'adaptive'],
             'learning_rate_init': loguniform(1e-4, 1e-1),
@@ -82,13 +81,6 @@ POSSIBLE_CLASSIFIERS = {
             'decision_function_shape': ['ovo', 'ovr'],
             'break_ties': [True, False],
             'random_state': randint(0, 100)
-        }
-    },
-    'MultinomialNB': {
-        'model': MultinomialNB(),
-        'params': {
-            'alpha': np.linspace(0.1, 2, 20),  # Additive (Laplace/Lidstone) smoothing parameter
-            'fit_prior': [True, False]  # Whether to learn class prior probabilities or not.
         }
     },
     'DecisionTreeClassifier': {
