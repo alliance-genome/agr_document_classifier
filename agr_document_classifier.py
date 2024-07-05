@@ -17,13 +17,13 @@ from grobid_client.types import TEI, File
 from joblib import dump, load
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+from scipy.stats import loguniform, expon, randint, uniform
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_validate, GridSearchCV
+from sklearn.model_selection import cross_validate, RandomizedSearchCV
 from sklearn.neural_network import MLPClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
-
 
 nltk.download('stopwords')
 nltk.download('punkt')
@@ -34,60 +34,61 @@ logger = logging.getLogger(__name__)
 
 POSSIBLE_CLASSIFIERS = {
     'LogisticRegression': {
-        'model': LogisticRegression(random_state=42),
+        'model': LogisticRegression(random_state=42, max_iter=1000),
         'params': {
-            'C': [0.01, 0.1, 1, 10, 100],
+            'C': expon(scale=100),
             'solver': ['liblinear', 'saga']
         }
     },
     'RandomForestClassifier': {
         'model': RandomForestClassifier(random_state=42),
         'params': {
-            'n_estimators': [50, 100, 200],
-            'max_depth': [None, 10, 20, 30],
-            'min_samples_split': [2, 5, 10]
+            'n_estimators': randint(5, 500),
+            'max_depth': list(range(2, 10, 2)),
+            'min_samples_split': randint(2, 20)
         }
     },
     'GradientBoostingClassifier': {
         'model': GradientBoostingClassifier(random_state=42),
         'params': {
-            'n_estimators': [50, 100, 200],
-            'learning_rate': [0.01, 0.1, 0.2, 0.3],
-            'max_depth': [3, 4, 5, 6, 7]
+            'n_estimators': randint(10, 200),
+            'learning_rate': loguniform(0.01, 0.5),
+            'max_depth': list(range(2, 10, 2))
         }
     },
     'XGBClassifier': {
-        'model': XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='logloss'),
+        'model': XGBClassifier(random_state=42, eval_metric='logloss'),
         'params': {
-            'n_estimators': [50, 100, 200],
-            'learning_rate': [0.01, 0.1, 0.2, 0.3],
-            'max_depth': [3, 4, 5, 6, 7]
+            'n_estimators': randint(10, 200),
+            'learning_rate': loguniform(0.01, 0.5),
+            'max_depth': list(range(2, 10, 2))
         }
     },
     'MLPClassifier': {
         'model': MLPClassifier(max_iter=1000),
         'params': {
-            'hidden_layer_sizes': [(50,), (100,), (50, 50), (100, 100)],
+            'hidden_layer_sizes': [(50,), (100,), (500,), (50, 50), (100, 100), (500, 500), (50, 50, 50),
+                                   (100, 100, 100), (500, 500, 500)],
             'activation': ['tanh', 'relu'],
             'solver': ['sgd', 'adam'],
-            'alpha': [0.0001, 0.001, 0.01, 0.1],
-            'learning_rate_init': [0.001, 0.01, 0.1]
+            'alpha': loguniform(1e-4, 1e-1),
+            'learning_rate_init': loguniform(1e-3, 1e-1)
         }
     },
     'SVC': {
         'model': SVC(),
         'params': {
-            'C': [0.1, 1, 10, 100, 1000],
+            'C': expon(scale=100),
             'kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
-            'gamma': ['scale', 'auto', 0.001, 0.0001],
-            'degree': [2, 3, 4, 5],  # Only used if kernel is 'poly'
-            'coef0': [0.0, 0.1, 0.5, 1.0]  # Independent term in kernel function. It is only significant in 'poly' and 'sigmoid'.
+            'gamma': ['scale', 'auto'] + list(expon(scale=.001).rvs(100)),
+            'degree': list(range(1, 10)),  # Only used if kernel is 'poly'
+            'coef0': uniform(0.0, 1.0)  # Independent term in kernel function. Used in 'poly' and 'sigmoid'.
         }
     }
 }
 
 
-def extract_embeddings(model, document):
+def get_document_embedding(model, document):
     # Split the document into words and extract the embedding for each word
     words = document.split()
     embeddings = [model.get_word_vector(word) for word in words]
@@ -117,9 +118,10 @@ def train_classifier(embedding_model_path: str, training_data_dir: str):
             text = fulltext
             if text:
                 text = remove_stopwords(text)
-                text_embedding = extract_embeddings(embedding_model, text)
+                text_embedding = get_document_embedding(embedding_model, text)
                 X.append(text_embedding)
                 y.append(int(label == "positive"))
+    del embedding_model
     logger.info("Finished loading training set.")
     logger.info(f"Dataset size: {str(len(X))}")
 
@@ -132,23 +134,24 @@ def train_classifier(embedding_model_path: str, training_data_dir: str):
     best_params = None
     best_classifier_name = ""
 
-    logger.info("Starting model selection with grid search hyperparameter optimization and cross-validation.")
+    k_folds = 5
+
+    logger.info("Starting model selection with hyperparameter optimization and cross-validation.")
     # Iterate over classifiers and perform grid search
     for classifier_name, classifier_info in POSSIBLE_CLASSIFIERS.items():
         logger.info(f"Evaluating model {classifier_name}.")
-        grid_search = GridSearchCV(estimator=classifier_info['model'], param_grid=classifier_info['params'], cv=5,
-                                   scoring='f1', verbose=1, n_jobs=-1)
-        grid_search.fit(X, y)
+        random_search = RandomizedSearchCV(estimator=classifier_info['model'], n_iter=50,
+                                           param_distributions=classifier_info['params'], cv=k_folds, scoring='f1',
+                                           verbose=1, n_jobs=-1)
+        random_search.fit(X, y)
 
-        if grid_search.best_score_ > best_score:
-            best_score = grid_search.best_score_
-            best_classifier = grid_search.best_estimator_
-            best_params = grid_search.best_params_
+        if random_search.best_score_ > best_score:
+            best_score = random_search.best_score_
+            best_classifier = random_search.best_estimator_
+            best_params = random_search.best_params_
             best_classifier_name = classifier_name
 
     logger.info(f"Selected model {best_classifier_name}.")
-    # Define the number of folds for cross-validation
-    k_folds = 5
 
     # Perform cross-validation with multiple scoring metrics
     scoring_metrics = ['precision', 'recall', 'f1']
@@ -220,7 +223,7 @@ def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
                 try:
                     article: Article = TEI.parse(file_stream, figures=True)
                 except Exception as e:
-                    logging.error(str(e))
+                    logging.error(f"Error parsing TEI file for {str(file_path)}: {str(e)}")
                     continue
                 sentences = []
                 for section in article.sections:
@@ -238,7 +241,7 @@ def classify_documents(embedding_model_path: str, classifier_model_path: str, in
     classifier_model = load_classifier(classifier_model_path)
     X = []
     for document in get_documents(input_docs_dir=input_docs_dir):
-        doc_embedding = extract_embeddings(embedding_model, document)
+        doc_embedding = get_document_embedding(embedding_model, document)
         X.append(doc_embedding)
 
     X = np.array(X)
