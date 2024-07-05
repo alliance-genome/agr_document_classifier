@@ -76,7 +76,7 @@ POSSIBLE_CLASSIFIERS = {
         }
     },
     'SVC': {
-        'model': SVC(),
+        'model': SVC(probability=True),
         'params': {
             'C': expon(scale=100),
             'kernel': ['linear', 'poly', 'rbf', 'sigmoid'],
