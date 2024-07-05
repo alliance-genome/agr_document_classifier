@@ -103,7 +103,7 @@ def load_embedding_model(model_path):
     return model
 
 
-def train_classifier(embedding_model_path: str, training_data_dir: str, test_size: float):
+def train_classifier(embedding_model_path: str, training_data_dir: str):
     embedding_model = load_embedding_model(model_path=embedding_model_path)
 
     X = []
@@ -250,8 +250,6 @@ if __name__ == '__main__':
                         required=False)
     parser.add_argument("-t", "--training_docs_dir", type=str, help="Path to the docs to classify",
                         required=False)
-    parser.add_argument("-s", "--test_size", type=float, help="Percentage of data used for testing",
-                        default=0.2)
     parser.add_argument("-l", "--log_level", type=str,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help="Set the logging level")
@@ -267,8 +265,7 @@ if __name__ == '__main__':
         print(classifications)
     else:
         classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
-            embedding_model_path=args.embedding_model_path, training_data_dir=args.training_docs_dir,
-            test_size=args.test_size)
+            embedding_model_path=args.embedding_model_path, training_data_dir=args.training_docs_dir)
         save_classifier(classifier=classifier, file_path=args.classifier_model_path)
         print(f"Selected Model: {classifier_name}, Parameters {classifier_params}, "
               f"Precision: {str(precision)}, Recall: {str(recall)}, F1 score: {str(fscore)}")
