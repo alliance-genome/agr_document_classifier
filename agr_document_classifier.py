@@ -12,7 +12,7 @@ import nltk
 import numpy as np
 from grobid_client import Client
 from grobid_client.api.pdf import process_fulltext_document
-from grobid_client.models import Article, ProcessForm
+from grobid_client.models import Article, ProcessForm, TextWithRefs
 from grobid_client.types import TEI, File
 from joblib import dump, load
 from nltk.corpus import stopwords
@@ -114,7 +114,7 @@ def train_classifier(embedding_model_path: str, training_data_dir: str):
     logger.info("Loading training set.")
     for label in ["positive", "negative"]:
         for fulltext, title, abstract in get_documents(os.path.join(training_data_dir, label, "*")):
-            text = abstract
+            text = fulltext
             if text:
                 text = remove_stopwords(text)
                 text_embedding = extract_embeddings(embedding_model, text)
@@ -177,13 +177,18 @@ def load_classifier(file_path):
 def get_sentences_from_tei_section(section):
     sentences = []
     for paragraph in section.paragraphs:
+        if isinstance(paragraph, TextWithRefs):
+            paragraph = [paragraph]
         for sentence in paragraph:
-            if not sentence.text.isdigit() and not (
-                    len(section.paragraphs) == 3 and
-                    section.paragraphs[0][0].text in ['\n', ' '] and
-                    section.paragraphs[-1][0].text in ['\n', ' ']
-            ):
-                sentences.append(re.sub('<[^<]+>', '', sentence.text))
+            try:
+                if not sentence.text.isdigit() and not (
+                        len(section.paragraphs) == 3 and
+                        section.paragraphs[0][0].text in ['\n', ' '] and
+                        section.paragraphs[-1][0].text in ['\n', ' ']
+                ):
+                    sentences.append(re.sub('<[^<]+>', '', sentence.text))
+            except Exception as e:
+                logger.error(f"Error parsing sentence {str(e)}")
     sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
     return sentences
 
@@ -201,31 +206,31 @@ def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
         file_obj = Path(file_path)
         if file_path.endswith(".tei.xml") or file_path.endswith(".pdf"):
             with file_obj.open("rb") as fin:
+                if file_path.endswith(".pdf"):
+                    if client is None:
+                        client = Client(base_url=os.environ.get("GROBID_API_URL"), timeout=1000, verify_ssl=False)
+                    logger.info("Started pdf to TEI conversion")
+                    form = ProcessForm(
+                        segment_sentences="1",
+                        input_=File(file_name=file_obj.name, payload=fin, mime_type="application/pdf"))
+                    r = process_fulltext_document.sync_detailed(client=client, multipart_data=form)
+                    file_stream = r.content
+                else:
+                    file_stream = fin
                 try:
-                    if file_path.endswith(".pdf"):
-                        if client is None:
-                            client = Client(base_url=os.environ.get("GROBID_API_URL"), timeout=1000, verify_ssl=False)
-                        logger.info("Started pdf to TEI conversion")
-                        form = ProcessForm(
-                            segment_sentences="1",
-                            input_=File(file_name=file_obj.name, payload=fin, mime_type="application/pdf"))
-                        r = process_fulltext_document.sync_detailed(client=client, multipart_data=form)
-                        file_stream = r.content
-                    else:
-                        file_stream = fin
                     article: Article = TEI.parse(file_stream, figures=True)
-                    sentences = []
-                    for section in article.sections:
-                        sentences.extend(get_sentences_from_tei_section(section))
-                    abstract = ""
-                    for section in article.sections:
-                        if section.name == "ABSTRACT":
-                            abstract = " ".join(get_sentences_from_tei_section(section))
-                            break
-                    yield " ".join(sentences), article.title, abstract
                 except Exception as e:
                     logging.error(str(e))
                     continue
+                sentences = []
+                for section in article.sections:
+                    sentences.extend(get_sentences_from_tei_section(section))
+                abstract = ""
+                for section in article.sections:
+                    if section.name == "ABSTRACT":
+                        abstract = " ".join(get_sentences_from_tei_section(section))
+                        break
+                yield " ".join(sentences), article.title, abstract
 
 
 def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
