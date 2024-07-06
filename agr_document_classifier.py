@@ -1,5 +1,6 @@
 import argparse
 import glob
+import json
 import logging
 import os
 import os.path
@@ -215,6 +216,13 @@ if __name__ == '__main__':
         classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
             embedding_model_path=args.embedding_model_path, training_data_dir=args.training_docs_dir)
         save_classifier(classifier=classifier, file_path=args.classifier_model_path)
-        print(f"Selected Model: {classifier_name}, Precision: {str(precision)}, Recall: {str(recall)}, "
-              f"F1 score: {str(fscore)}, Fitted Parameters {classifier_params}")
-
+        file_name_without_extension = os.path.splitext(args.classifier_model_path)[0]
+        stats = {
+            "selected_model": classifier_name,
+            "precision": precision,
+            "recall": recall,
+            "f_score": fscore,
+            "fitted_parameters": classifier_params
+        }
+        with open(file_name_without_extension + ".stats.json", "w") as stats_file:
+            json.dump(stats, stats_file, indent=4)
