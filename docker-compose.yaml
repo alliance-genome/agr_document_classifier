@@ -11,5 +11,4 @@ services:
       - EMBEDDING_MODEL_PATH=/usr/src/app/embedding_model
       - CLASSIFY_DOCS_DIR=/usr/src/app/classification
       - TRAINING_DOCS_DIR=/usr/src/app/training
-      - TEST_SIZE=${TEST_SIZE}
       - GROBID_API_URL=${GROBID_API_URL}
