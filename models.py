@@ -90,7 +90,7 @@ POSSIBLE_CLASSIFIERS = {
             'max_depth': [None, 10, 20, 30, 40, 50],  # Maximum depth of the tree
             'min_samples_split': [2, 5, 10],  # Minimum number of samples required to split an internal node
             'min_samples_leaf': [1, 2, 4],  # Minimum number of samples required to be at a leaf node
-            'max_features': ['auto', 'sqrt', 'log2']  # Number of features to consider when looking for the best split
+            'max_features': [None, 'sqrt', 'log2']  # Number of features to consider when looking for the best split
         }
     },
     'KNeighborsClassifier': {
@@ -105,7 +105,8 @@ POSSIBLE_CLASSIFIERS = {
     'SGDClassifier': {
         'model': SGDClassifier(random_state=42, max_iter=1000),
         'params': {
-            'loss': ['hinge', 'log', 'modified_huber', 'squared_hinge', 'perceptron'],  # Loss function to be used
+            'loss': ['hinge', 'modified_huber', 'squared_epsilon_insensitive', 'huber', 'log_loss', 'perceptron',
+                     'squared_hinge', 'squared_error', 'epsilon_insensitive'],  # Loss function to be used
             'penalty': ['l2', 'l1', 'elasticnet'],  # The penalty (aka regularization term) to be used
             'alpha': np.logspace(-6, -1, 10),  # Constant that multiplies the regularization term
             'learning_rate': ['constant', 'optimal', 'invscaling', 'adaptive'],  # Learning rate schedule
