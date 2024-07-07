@@ -15,9 +15,7 @@ POSSIBLE_CLASSIFIERS = {
         'params': {
             'C': loguniform(1e-4, 1e+4),
             'solver': ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga'],
-            'penalty': ['l2', None],
             'class_weight': [None, 'balanced'],
-            'l1_ratio': np.linspace(0, 1, 10),
             'warm_start': [True, False]
         }
     },
@@ -38,7 +36,7 @@ POSSIBLE_CLASSIFIERS = {
         'model': GradientBoostingClassifier(random_state=42),
         'params': {
             'n_estimators': randint(10, 200),
-            'learning_rate': loguniform(0.05, 1),
+            'learning_rate': loguniform(0.1, 1),
             'max_depth': list(range(2, 10, 2))
         }
     },
@@ -46,7 +44,7 @@ POSSIBLE_CLASSIFIERS = {
         'model': XGBClassifier(random_state=42, eval_metric='logloss'),
         'params': {
             'n_estimators': randint(10, 200),
-            'learning_rate': loguniform(0.01, 0.5),
+            'learning_rate': loguniform(0.1, 0.5),
             'max_depth': list(range(2, 10, 2))
         }
     },
@@ -79,7 +77,6 @@ POSSIBLE_CLASSIFIERS = {
             'tol': uniform(1e-4, 1e-2),
             'class_weight': [None, 'balanced'],
             'decision_function_shape': ['ovo', 'ovr'],
-            'break_ties': [True, False],
             'random_state': randint(0, 100)
         }
     },

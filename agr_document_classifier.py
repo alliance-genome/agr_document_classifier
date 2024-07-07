@@ -11,6 +11,7 @@ from typing import Tuple
 import fasttext
 import nltk
 import numpy as np
+from gensim.models import KeyedVectors
 from grobid_client import Client
 from grobid_client.api.pdf import process_fulltext_document
 from grobid_client.models import Article, ProcessForm, TextWithRefs
@@ -29,23 +30,34 @@ nltk.download('punkt')
 logger = logging.getLogger(__name__)
 
 
-def get_document_embedding(model, document):
+def get_document_embedding(model, document, weighted_average_word_embedding: bool = False):
     # Split the document into words and extract the embedding for each word
     words = document.split()
-    embeddings = [model.get_word_vector(word) for word in words]
-    # Average the embeddings to get a single vector for the document
-    doc_embedding = np.mean(embeddings, axis=0)
+    if isinstance(model, KeyedVectors):
+        embeddings = [model[word] for word in words if word in model]
+        word_to_index = model.key_to_index
+    else:
+        embeddings = [model.get_word_vector(word) for word in words if word in model.words]
+        word_to_index = {model.words[i]: i for i in range(1, len(model.words))}
+    if weighted_average_word_embedding:
+        weights = [word_to_index[word] / len(word_to_index) for word in words if word in word_to_index]
+        doc_embedding = np.average(embeddings, axis=0, weights=weights)
+    else:
+        doc_embedding = np.mean(embeddings, axis=0)
     return doc_embedding
 
 
 def load_embedding_model(model_path):
     logger.info("Loading embeddings...")
-    model = fasttext.load_model(model_path)
+    if model_path.endswith(".vec.bin"):
+        model = KeyedVectors.load_word2vec_format(model_path, binary=True)
+    else:
+        model = fasttext.load_model(model_path)
     logger.info("Finished loading embeddings.")
     return model
 
 
-def train_classifier(embedding_model_path: str, training_data_dir: str):
+def train_classifier(embedding_model_path: str, training_data_dir: str, weighted_average_word_embedding: bool = False):
     embedding_model = load_embedding_model(model_path=embedding_model_path)
 
     X = []
@@ -59,7 +71,9 @@ def train_classifier(embedding_model_path: str, training_data_dir: str):
             text = fulltext
             if text:
                 text = remove_stopwords(text)
-                text_embedding = get_document_embedding(embedding_model, text)
+                text = text.lower()
+                text_embedding = get_document_embedding(embedding_model, text,
+                                                        weighted_average_word_embedding=weighted_average_word_embedding)
                 X.append(text_embedding)
                 y.append(int(label == "positive"))
     del embedding_model
@@ -85,6 +99,9 @@ def train_classifier(embedding_model_path: str, training_data_dir: str):
                                            param_distributions=classifier_info['params'], cv=k_folds, scoring='f1',
                                            verbose=1, n_jobs=-1)
         random_search.fit(X, y)
+
+        print(f"Finished training model and fitting best hyperparameters for {classifier_name}. F1 score: "
+              f"{str(random_search.best_score_)}")
 
         if random_search.best_score_ > best_score:
             best_score = random_search.best_score_
@@ -199,6 +216,9 @@ if __name__ == '__main__':
                         required=False)
     parser.add_argument("-t", "--training_docs_dir", type=str, help="Path to the docs to classify",
                         required=False)
+    parser.add_argument("-w", "--weighted_average_word_embedding", action="store_true",
+                        help="Whether to use a weighted word embedding based on word frequencies from the model",
+                        required=False)
     parser.add_argument("-l", "--log_level", type=str,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help="Set the logging level")
@@ -214,7 +234,8 @@ if __name__ == '__main__':
         print(classifications)
     else:
         classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
-            embedding_model_path=args.embedding_model_path, training_data_dir=args.training_docs_dir)
+            embedding_model_path=args.embedding_model_path, training_data_dir=args.training_docs_dir,
+            weighted_average_word_embedding=args.weighted_average_word_embedding)
         save_classifier(classifier=classifier, file_path=args.classifier_model_path)
         file_name_without_extension = os.path.splitext(args.classifier_model_path)[0]
         stats = {
