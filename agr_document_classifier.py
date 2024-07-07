@@ -6,7 +6,7 @@ import os
 import os.path
 import re
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, List
 
 import fasttext
 import nltk
@@ -20,6 +20,7 @@ from joblib import dump, load
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.model_selection import cross_validate, RandomizedSearchCV
+from sklearn.preprocessing import StandardScaler
 
 from models import POSSIBLE_CLASSIFIERS
 
@@ -30,7 +31,8 @@ nltk.download('punkt')
 logger = logging.getLogger(__name__)
 
 
-def get_document_embedding(model, document, weighted_average_word_embedding: bool = False):
+def get_document_embedding(model, document, weighted_average_word_embedding: bool = False,
+                           standardize_embeddings: bool = False, normalize_embeddings: bool = False):
     # Split the document into words and extract the embedding for each word
     words = document.split()
     if isinstance(model, KeyedVectors):
@@ -39,11 +41,25 @@ def get_document_embedding(model, document, weighted_average_word_embedding: boo
     else:
         embeddings = [model.get_word_vector(word) for word in words if word in model.words]
         word_to_index = {model.words[i]: i for i in range(1, len(model.words))}
+
+    epsilon = 1e-10
+    embeddings_2d = np.array([vec if np.linalg.norm(vec) > 0 else np.full(vec.shape, epsilon) for vec in embeddings])
+
+    if standardize_embeddings:
+        # Standardize the embeddings
+        scaler = StandardScaler()
+        embeddings_2d = scaler.fit_transform(embeddings_2d)
+
+    if normalize_embeddings:
+        # Normalize the embeddings
+        norm = np.linalg.norm(embeddings_2d, axis=1, keepdims=True) + epsilon
+        embeddings_2d /= norm
+
     if weighted_average_word_embedding:
         weights = [word_to_index[word] / len(word_to_index) for word in words if word in word_to_index]
-        doc_embedding = np.average(embeddings, axis=0, weights=weights)
+        doc_embedding = np.average(embeddings_2d, axis=0, weights=weights)
     else:
-        doc_embedding = np.mean(embeddings, axis=0)
+        doc_embedding = np.mean(embeddings_2d, axis=0)
     return doc_embedding
 
 
@@ -57,7 +73,9 @@ def load_embedding_model(model_path):
     return model
 
 
-def train_classifier(embedding_model_path: str, training_data_dir: str, weighted_average_word_embedding: bool = False):
+def train_classifier(embedding_model_path: str, training_data_dir: str, weighted_average_word_embedding: bool = False,
+                     standardize_embeddings: bool = False, normalize_embeddings: bool = False,
+                     sections_to_use: List[str] = None):
     embedding_model = load_embedding_model(model_path=embedding_model_path)
 
     X = []
@@ -68,12 +86,23 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     logger.info("Loading training set.")
     for label in ["positive", "negative"]:
         for fulltext, title, abstract in get_documents(os.path.join(training_data_dir, label, "*")):
-            text = fulltext
+            text = ""
+            if not sections_to_use:
+                text = fulltext
+            else:
+                if "title" in sections_to_use:
+                    text = title
+                if "fulltext" in sections_to_use:
+                    text += " " + fulltext
+                if abstract in sections_to_use:
+                    text += " " + abstract
             if text:
                 text = remove_stopwords(text)
                 text = text.lower()
                 text_embedding = get_document_embedding(embedding_model, text,
-                                                        weighted_average_word_embedding=weighted_average_word_embedding)
+                                                        weighted_average_word_embedding=weighted_average_word_embedding,
+                                                        standardize_embeddings=standardize_embeddings,
+                                                        normalize_embeddings=normalize_embeddings)
                 X.append(text_embedding)
                 y.append(int(label == "positive"))
     del embedding_model
@@ -95,7 +124,7 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     # Iterate over classifiers and perform grid search
     for classifier_name, classifier_info in POSSIBLE_CLASSIFIERS.items():
         logger.info(f"Evaluating model {classifier_name}.")
-        random_search = RandomizedSearchCV(estimator=classifier_info['model'], n_iter=50,
+        random_search = RandomizedSearchCV(estimator=classifier_info['model'], n_iter=100,
                                            param_distributions=classifier_info['params'], cv=k_folds, scoring='f1',
                                            verbose=1, n_jobs=-1)
         random_search.fit(X, y)
@@ -216,8 +245,16 @@ if __name__ == '__main__':
                         required=False)
     parser.add_argument("-t", "--training_docs_dir", type=str, help="Path to the docs to classify",
                         required=False)
+    parser.add_argument("-u", "--sections_to_use", type=str, nargs="+", help="Parts of the articles to use",
+                        required=False)
     parser.add_argument("-w", "--weighted_average_word_embedding", action="store_true",
                         help="Whether to use a weighted word embedding based on word frequencies from the model",
+                        required=False)
+    parser.add_argument("-n", "--normalize_embeddings", action="store_true",
+                        help="Whether to normalize the word embedding vectors",
+                        required=False)
+    parser.add_argument("-s", "--standardize_embeddings", action="store_true",
+                        help="Whether to standardize the word embedding vectors",
                         required=False)
     parser.add_argument("-l", "--log_level", type=str,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
@@ -235,7 +272,9 @@ if __name__ == '__main__':
     else:
         classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
             embedding_model_path=args.embedding_model_path, training_data_dir=args.training_docs_dir,
-            weighted_average_word_embedding=args.weighted_average_word_embedding)
+            weighted_average_word_embedding=args.weighted_average_word_embedding,
+            standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
+            sections_to_use=args.sections_to_use)
         save_classifier(classifier=classifier, file_path=args.classifier_model_path)
         file_name_without_extension = os.path.splitext(args.classifier_model_path)[0]
         stats = {
