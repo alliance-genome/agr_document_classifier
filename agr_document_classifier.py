@@ -20,7 +20,7 @@ from joblib import dump, load
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score
-from sklearn.model_selection import cross_validate, RandomizedSearchCV, StratifiedKFold
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
 from models import POSSIBLE_CLASSIFIERS
