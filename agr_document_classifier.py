@@ -19,7 +19,8 @@ from grobid_client.types import TEI, File
 from joblib import dump, load
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-from sklearn.model_selection import cross_validate, RandomizedSearchCV
+from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score
+from sklearn.model_selection import cross_validate, RandomizedSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
 from models import POSSIBLE_CLASSIFIERS
@@ -117,43 +118,45 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     best_classifier = None
     best_params = None
     best_classifier_name = ""
+    best_results = {}
+    best_index = 0
 
-    k_folds = 5
+    stratified_k_folds = StratifiedKFold(n_splits=5)
+
+    scoring = {
+        'precision': make_scorer(precision_score),
+        'recall': make_scorer(recall_score),
+        'f1': make_scorer(f1_score)
+    }
 
     logger.info("Starting model selection with hyperparameter optimization and cross-validation.")
-    # Iterate over classifiers and perform grid search
     for classifier_name, classifier_info in POSSIBLE_CLASSIFIERS.items():
         logger.info(f"Evaluating model {classifier_name}.")
         random_search = RandomizedSearchCV(estimator=classifier_info['model'], n_iter=100,
-                                           param_distributions=classifier_info['params'], cv=k_folds, scoring='f1',
-                                           verbose=1, n_jobs=-1)
+                                           param_distributions=classifier_info['params'], cv=stratified_k_folds,
+                                           scoring=scoring, refit='f1', verbose=1, n_jobs=-1)
         random_search.fit(X, y)
 
-        print(f"Finished training model and fitting best hyperparameters for {classifier_name}. F1 score: "
-              f"{str(random_search.best_score_)}")
+        logger.info(f"Finished training model and fitting best hyperparameters for {classifier_name}. F1 score: "
+                    f"{str(random_search.best_score_)}")
 
         if random_search.best_score_ > best_score:
             best_score = random_search.best_score_
             best_classifier = random_search.best_estimator_
             best_params = random_search.best_params_
             best_classifier_name = classifier_name
+            best_results = random_search.cv_results_
+            best_index = random_search.best_index_
 
     logger.info(f"Selected model {best_classifier_name}.")
 
-    # Perform cross-validation with multiple scoring metrics
-    scoring_metrics = ['precision', 'recall', 'f1']
-    cross_val_results = cross_validate(best_classifier, X, y, cv=k_folds, scoring=scoring_metrics)
-
-    # Calculate the average scores across all folds
-    average_precision = cross_val_results['test_precision'].mean()
-    average_recall = cross_val_results['test_recall'].mean()
-    average_fscore = cross_val_results['test_f1'].mean()
-
-    # Train the final model on the entire dataset
-    final_classifier = best_classifier.fit(X, y)
+    # Retrieve the average precision, recall, and F1 score
+    average_precision = best_results['mean_test_precision'][best_index]
+    average_recall = best_results['mean_test_recall'][best_index]
+    average_f1 = best_results['mean_test_f1'][best_index]
 
     # Return the trained model and performance metrics
-    return final_classifier, average_precision, average_recall, average_fscore, best_classifier_name, best_params
+    return best_classifier, average_precision, average_recall, average_f1, best_classifier_name, best_params
 
 
 def save_classifier(classifier, file_path):
