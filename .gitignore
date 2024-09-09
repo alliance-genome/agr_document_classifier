@@ -7,3 +7,4 @@ htmlcov
 .vscode/*
 training_sets/*
 stats.txt
+.env.test

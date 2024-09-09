@@ -161,9 +161,11 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
 
 def save_classifier(classifier, file_path):
     dump(classifier, file_path)
+    # TODO: upload model to ABC
 
 
 def load_classifier(file_path):
+    # TODO download classifier from ABC
     return load(file_path)
 
 
@@ -228,7 +230,9 @@ def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
 
 def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
     embedding_model = load_embedding_model(model_path=embedding_model_path)
+    # TODO: download classification model from ABC
     classifier_model = load_classifier(classifier_model_path)
+    # TODO: download documents to classify
     X = []
     for document in get_documents(input_docs_dir=input_docs_dir):
         doc_embedding = get_document_embedding(embedding_model, document)
@@ -248,6 +252,8 @@ if __name__ == '__main__':
                         required=False)
     parser.add_argument("-t", "--training_docs_dir", type=str, help="Path to the docs to classify",
                         required=False)
+    parser.add_argument("-M", "--mod-abbreviation", type=str, help="MOD abbreviation", required=True)
+    parser.add_argument("-T", "--topic", type=str, help="ATP topic ID", required=True)
     parser.add_argument("-u", "--sections_to_use", type=str, nargs="+", help="Parts of the articles to use",
                         required=False)
     parser.add_argument("-w", "--weighted_average_word_embedding", action="store_true",
