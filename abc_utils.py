@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 cache = TTLCache(maxsize=100, ttl=7200)
 
 
+job_category_topic_map = {
+    "catalytic_activity": "ATP:0000061"
+}
+
+
 def get_mod_species_map():
     url = f'https://{blue_api_base_url}/mod/taxons/default'
     request = urllib.request.Request(url=url)
@@ -32,14 +37,58 @@ def get_mod_species_map():
         logger.error(e)
 
 
+def get_mod_id_from_abbreviation(mod_abbreviation):
+    url = f'https://{blue_api_base_url}/mod/{mod_abbreviation}'
+    request = urllib.request.Request(url=url)
+    request.add_header("Content-type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        with urllib.request.urlopen(request) as response:
+            resp = response.read().decode("utf8")
+            resp_obj = json.loads(resp)
+            return resp_obj["mod_id"]
+    except HTTPError as e:
+        logger.error(e)
+
+
 def get_cached_mod_species_map():
     if 'mod_species_map' not in cache:
         cache['mod_species_map'] = get_mod_species_map()
     return cache['mod_species_map']
 
 
-def send_classification_tags_to_abc(reference_curie: str, mod_abbreviation: str, topic: str, negated: bool,
-                                    confidence_level: str):
+def get_cached_mod_id_from_abbreviation(mod_abbreviation):
+    if 'mod_abbreviation_id' not in cache:
+        cache['mod_abbreviation_id'] = {}
+    if mod_abbreviation not in cache['mod_abbreviation_id']:
+        cache['mod_abbreviation_id'][mod_abbreviation] = get_mod_id_from_abbreviation(mod_abbreviation)
+    return cache['mod_abbreviation_id'][mod_abbreviation]
+
+
+def get_cached_mod_abbreviation_from_id(mod_id):
+    if 'mod_id_abbreviation' not in cache:
+        cache['mod_id_abbreviation'] = {}
+        for mod_abbreviation in get_cached_mod_species_map().keys():
+            cache['mod_id_abbreviation'][get_cached_mod_id_from_abbreviation(mod_abbreviation)] = mod_abbreviation
+    return cache['mod_id_abbreviation'][mod_id]
+
+
+def get_curie_from_reference_id(reference_id):
+    url = f'https://{blue_api_base_url}/reference/{reference_id}'
+    request = urllib.request.Request(url=url)
+    request.add_header("Content-type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        with urllib.request.urlopen(request) as response:
+            resp = response.read().decode("utf8")
+            resp_obj = json.loads(resp)
+            return resp_obj["curie"]
+    except HTTPError as e:
+        logger.error(e)
+
+
+def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, topic: str, negated: bool,
+                                   confidence_level: str):
     url = f'https://{blue_api_base_url}/topic_entity_tag'
     token = get_authentication_token()
     tet_data = {
@@ -96,7 +145,7 @@ def get_file_from_abc_reffile_obj(referencefile_json_obj):
         return None
 
 
-def download_tei_files_for_references(reference_curies: List[str], output_dir: str):
+def download_tei_files_for_references(reference_curies: List[str], output_dir: str, mod_abbreviation):
     for reference_curie in reference_curies:
         all_reffiles_for_pap_api = f'https://{blue_api_base_url}/reference/referencefile/show_all/{reference_curie}'
         request = urllib.request.Request(url=all_reffiles_for_pap_api)
@@ -107,7 +156,9 @@ def download_tei_files_for_references(reference_curies: List[str], output_dir: s
                 resp = response.read().decode("utf8")
                 resp_obj = json.loads(resp)
                 for ref_file in resp_obj:
-                    if ref_file["file_extension"] == "tei" and ref_file["file_class"] == "tei":
+                    if ref_file["file_extension"] == "tei" and ref_file["file_class"] == "tei" and any(
+                            ref_file_mod["mod_abbreviation"] == mod_abbreviation for ref_file_mod in
+                            ref_file["referencefile_mods"]):
                         file_content = get_file_from_abc_reffile_obj(ref_file)
                         with open(os.path.join(output_dir, reference_curie.replace(
                                 ":", "_") + ".pdf"), "wb") as out_file:

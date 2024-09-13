@@ -5,6 +5,7 @@ import logging
 import os
 import os.path
 import re
+from collections import defaultdict
 from pathlib import Path
 from typing import Tuple, List
 
@@ -23,6 +24,9 @@ from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
+from abc_utils import get_jobs_to_classify, download_tei_files_for_references, get_curie_from_reference_id, \
+    get_cached_mod_id_from_abbreviation, send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
+    job_category_topic_map
 from models import POSSIBLE_CLASSIFIERS
 
 nltk.download('stopwords')
@@ -86,7 +90,7 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     # For each document in your training data, extract embeddings and labels
     logger.info("Loading training set.")
     for label in ["positive", "negative"]:
-        for fulltext, title, abstract in get_documents(os.path.join(training_data_dir, label, "*")):
+        for _, fulltext, title, abstract in get_documents(os.path.join(training_data_dir, label, "*")):
             text = ""
             if not sections_to_use:
                 text = fulltext
@@ -199,7 +203,7 @@ def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
     client = None
     for file_path in glob.glob(input_docs_dir):
         file_obj = Path(file_path)
-        if file_path.endswith(".tei.xml") or file_path.endswith(".pdf"):
+        if file_path.endswith(".tei") or file_path.endswith(".pdf"):
             with file_obj.open("rb") as fin:
                 if file_path.endswith(".pdf"):
                     if client is None:
@@ -225,21 +229,21 @@ def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
                     if section.name == "ABSTRACT":
                         abstract = " ".join(get_sentences_from_tei_section(section))
                         break
-                yield " ".join(sentences), article.title, abstract
+                yield file_path, " ".join(sentences), article.title, abstract
 
 
 def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
     embedding_model = load_embedding_model(model_path=embedding_model_path)
-    # TODO: download classification model from ABC
     classifier_model = load_classifier(classifier_model_path)
-    # TODO: download documents to classify
     X = []
-    for document in get_documents(input_docs_dir=input_docs_dir):
-        doc_embedding = get_document_embedding(embedding_model, document)
+    files_loaded = []
+    for file_path, fulltext, title, abstract in get_documents(input_docs_dir=input_docs_dir):
+        doc_embedding = get_document_embedding(embedding_model, fulltext)
         X.append(doc_embedding)
-
+        files_loaded.append(file_path)
+    del embedding_model
     X = np.array(X)
-    return classifier_model.predict(X)
+    return files_loaded, classifier_model.predict(X), classifier_model.predict_proba(X)
 
 
 if __name__ == '__main__':
@@ -247,13 +251,8 @@ if __name__ == '__main__':
     parser.add_argument("-m", "--mode", type=str, choices=['train', 'classify'], default="classify",
                         help="Mode of operation: train or classify")
     parser.add_argument("-e", "--embedding_model_path", type=str, help="Path to the word embedding model")
-    parser.add_argument("-c", "--classifier_model_path", type=str, help="Path to the classifier model")
-    parser.add_argument("-i", "--classify_docs_dir", type=str, help="Path to the docs to classify",
-                        required=False)
-    parser.add_argument("-t", "--training_docs_dir", type=str, help="Path to the docs to classify",
-                        required=False)
-    parser.add_argument("-M", "--mod-abbreviation", type=str, help="MOD abbreviation", required=True)
-    parser.add_argument("-T", "--topic", type=str, help="ATP topic ID", required=True)
+    parser.add_argument("-M", "--mod-abbreviation", type=str, help="MOD abbreviation", required=False)
+    parser.add_argument("-T", "--topic", type=str, help="ATP topic ID", required=False)
     parser.add_argument("-u", "--sections_to_use", type=str, nargs="+", help="Parts of the articles to use",
                         required=False)
     parser.add_argument("-w", "--weighted_average_word_embedding", action="store_true",
@@ -274,18 +273,40 @@ if __name__ == '__main__':
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), 0))
 
     if args.mode == "classify":
-        classifications = classify_documents(embedding_model_path=args.embedding_model_path,
-                                             classifier_model_path=args.classifier_model_path,
-                                             input_docs_dir=args.classify_docs_dir)
-        print(classifications)
+        mod_datatype_jobs = defaultdict(list)
+        while all_jobs := get_jobs_to_classify():
+            for job in all_jobs:
+                datatype = job["job_name"].replace("classification_job", "")
+                mod_id = job["mod_id"]
+                mod_datatype_jobs[(mod_id, datatype)].append(job)
+        for (mod_id, datatype), jobs in mod_datatype_jobs.items():
+            # TODO: download the model from the ABC
+            if datatype != "catalytic_activity" and mod_id != get_cached_mod_id_from_abbreviation("WB"):
+                continue
+            reference_curies = [get_curie_from_reference_id(job["reference_id"]) for job in jobs]
+            os.makedirs("/data/to_classify", exist_ok=True)
+            download_tei_files_for_references(reference_curies, "/data/agr_document_classifier/to_classify",
+                                              get_cached_mod_id_from_abbreviation(mod_id))
+            files_loaded, classifications, conf_scores = classify_documents(
+                embedding_model_path=args.embedding_model_path,
+                classifier_model_path="/data/agr_document_classifier/classifier_model.joblib",
+                input_docs_dir="/data/agr_document_classifier/to_classify")
+            for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
+                confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
+                        conf_score < 0.75) else "High"
+                send_classification_tag_to_abc(file_path.replace("_", ":")[:-4],
+                                               get_cached_mod_abbreviation_from_id(mod_id),
+                                               job_category_topic_map[datatype], negated=classification == 0,
+                                               confidence_level=confidence_level)
     else:
+        # TODO: 1. download training docs for MOD and topid and store them in positive/negative dirs in fixed location
+        #       2. save classifier and stats by uploading them to the system
         classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
-            embedding_model_path=args.embedding_model_path, training_data_dir=args.training_docs_dir,
+            embedding_model_path=args.embedding_model_path, training_data_dir="/data/agr_document_classifier/training",
             weighted_average_word_embedding=args.weighted_average_word_embedding,
             standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
             sections_to_use=args.sections_to_use)
-        save_classifier(classifier=classifier, file_path=args.classifier_model_path)
-        file_name_without_extension = os.path.splitext(args.classifier_model_path)[0]
+        save_classifier(classifier=classifier, file_path="/data/agr_document_classifier/classifier_model.joblib")
         stats = {
             "selected_model": classifier_name,
             "precision": precision,
@@ -293,5 +314,5 @@ if __name__ == '__main__':
             "f_score": fscore,
             "fitted_parameters": classifier_params
         }
-        with open(file_name_without_extension + ".stats.json", "w") as stats_file:
+        with open("/data/agr_document_classifier/training_stats.json", "w") as stats_file:
             json.dump(stats, stats_file, indent=4)
