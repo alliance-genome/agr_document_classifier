@@ -26,12 +26,19 @@ from sklearn.preprocessing import StandardScaler
 
 from abc_utils import get_jobs_to_classify, download_tei_files_for_references, get_curie_from_reference_id, \
     get_cached_mod_id_from_abbreviation, send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
-    job_category_topic_map
+    job_category_topic_map, set_job_success
 from models import POSSIBLE_CLASSIFIERS
 
 nltk.download('stopwords')
 nltk.download('punkt')
 
+
+# Configure the logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 logger = logging.getLogger(__name__)
 
@@ -251,8 +258,6 @@ if __name__ == '__main__':
     parser.add_argument("-m", "--mode", type=str, choices=['train', 'classify'], default="classify",
                         help="Mode of operation: train or classify")
     parser.add_argument("-e", "--embedding_model_path", type=str, help="Path to the word embedding model")
-    parser.add_argument("-M", "--mod-abbreviation", type=str, help="MOD abbreviation", required=False)
-    parser.add_argument("-T", "--topic", type=str, help="ATP topic ID", required=False)
     parser.add_argument("-u", "--sections_to_use", type=str, nargs="+", help="Parts of the articles to use",
                         required=False)
     parser.add_argument("-w", "--weighted_average_word_embedding", action="store_true",
@@ -271,14 +276,19 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     logging.basicConfig(level=getattr(logging, args.log_level.upper(), 0))
-
     if args.mode == "classify":
         mod_datatype_jobs = defaultdict(list)
-        while all_jobs := get_jobs_to_classify():
+        limit = 1000
+        offset = 0
+        logger.info("Loading jobs to classify from ABC ...")
+        while all_jobs := get_jobs_to_classify(limit, offset):
+            logger.info("Loaded batch of 1000 jobs")
             for job in all_jobs:
-                datatype = job["job_name"].replace("classification_job", "")
+                datatype = job["job_name"].replace("_classification_job", "")
                 mod_id = job["mod_id"]
                 mod_datatype_jobs[(mod_id, datatype)].append(job)
+            offset += limit
+        logger.info("Finished loading jobs to classify from ABC ...")
         for (mod_id, datatype), jobs in mod_datatype_jobs.items():
             # TODO: download the model from the ABC
             if datatype != "catalytic_activity" and mod_id != get_cached_mod_id_from_abbreviation("WB"):
@@ -298,6 +308,8 @@ if __name__ == '__main__':
                                                get_cached_mod_abbreviation_from_id(mod_id),
                                                job_category_topic_map[datatype], negated=classification == 0,
                                                confidence_level=confidence_level)
+            for job in jobs:
+                set_job_success(job)
     else:
         # TODO: 1. download training docs for MOD and topid and store them in positive/negative dirs in fixed location
         #       2. save classifier and stats by uploading them to the system

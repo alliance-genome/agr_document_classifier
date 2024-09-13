@@ -118,8 +118,8 @@ def get_training_set_from_abc(mod_abbreviation: str, topic: str):
     ...
 
 
-def get_jobs_to_classify():
-    jobs_url = f'https://{blue_api_base_url}/workflow_tag/get_jobs/classification_job'
+def get_jobs_to_classify(limit: int = 1000, offset: int = 0):
+    jobs_url = f'https://{blue_api_base_url}/workflow_tag/jobs/classification_job&limit={limit}&offset={offset}'
     request = urllib.request.Request(url=jobs_url)
     request.add_header("Content-type", "application/json")
     request.add_header("Accept", "application/json")
@@ -128,6 +128,17 @@ def get_jobs_to_classify():
             resp = response.read().decode("utf8")
             resp_obj = json.loads(resp)
             return resp_obj
+    except HTTPError as e:
+        logger.error(e)
+
+
+def set_job_success(job):
+    url = f'https://{blue_api_base_url}/workflow_tag/job/success/{job["reference_workflow_tag_id"]}'
+    request = urllib.request.Request(url=url)
+    request.add_header("Content-type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        urllib.request.urlopen(request)
     except HTTPError as e:
         logger.error(e)
 
