@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-RUN apt-get update && apt-get install --no-install-recommends --yes build-essential
+RUN apt-get update && apt-get install --no-install-recommends --yes build-essential git
 
 WORKDIR /usr/src/app
 
