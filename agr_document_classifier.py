@@ -23,6 +23,7 @@ from nltk.tokenize import word_tokenize
 from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
+from tqdm import tqdm
 
 from abc_utils import get_jobs_to_classify, download_tei_files_for_references, get_curie_from_reference_id, \
     get_cached_mod_id_from_abbreviation, send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
@@ -95,9 +96,10 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
 
     # Assume you have a function to get your training data
     # For each document in your training data, extract embeddings and labels
-    logger.info("Loading training set.")
+    logger.info("Loading training set")
     for label in ["positive", "negative"]:
-        for _, fulltext, title, abstract in get_documents(os.path.join(training_data_dir, label, "*")):
+        for _, fulltext, title, abstract in tqdm(get_documents(os.path.join(training_data_dir, label, "*")),
+                                                 desc=f"Reading {label} documents"):
             text = ""
             if not sections_to_use:
                 text = fulltext
@@ -280,20 +282,25 @@ if __name__ == '__main__':
         mod_datatype_jobs = defaultdict(list)
         limit = 1000
         offset = 0
+        jobs_already_added = set()
         logger.info("Loading jobs to classify from ABC ...")
         while all_jobs := get_jobs_to_classify(limit, offset):
             logger.info("Loaded batch of 1000 jobs")
             for job in all_jobs:
+                reference_id = job["reference_id"]
                 datatype = job["job_name"].replace("_classification_job", "")
                 mod_id = job["mod_id"]
-                mod_datatype_jobs[(mod_id, datatype)].append(job)
+                if (mod_id, datatype, reference_id) not in jobs_already_added:
+                    mod_datatype_jobs[(mod_id, datatype)].append(job)
+                    jobs_already_added.add((mod_id, datatype, reference_id))
             offset += limit
         logger.info("Finished loading jobs to classify from ABC ...")
         for (mod_id, datatype), jobs in mod_datatype_jobs.items():
             # TODO: download the model from the ABC
-            if datatype != "catalytic_activity" and mod_id != get_cached_mod_id_from_abbreviation("WB"):
+            if datatype != "catalytic activity" or mod_id != get_cached_mod_id_from_abbreviation("WB"):
                 continue
-            reference_curies = [get_curie_from_reference_id(job["reference_id"]) for job in jobs]
+            reference_curies = [get_curie_from_reference_id(job["reference_id"]) for job in tqdm(
+                jobs, desc="Converting reference ids into curies")]
             os.makedirs("/data/to_classify", exist_ok=True)
             download_tei_files_for_references(reference_curies, "/data/agr_document_classifier/to_classify",
                                               get_cached_mod_id_from_abbreviation(mod_id))

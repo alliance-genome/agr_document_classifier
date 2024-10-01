@@ -8,6 +8,7 @@ from urllib.error import HTTPError
 
 from cachetools import TTLCache
 from fastapi_okta.okta_utils import get_authentication_token, generate_headers
+from tqdm import tqdm
 
 blue_api_base_url = os.environ.get('API_SERVER', "literature-rest.alliancegenome.org")
 
@@ -119,7 +120,7 @@ def get_training_set_from_abc(mod_abbreviation: str, topic: str):
 
 
 def get_jobs_to_classify(limit: int = 1000, offset: int = 0):
-    jobs_url = f'https://{blue_api_base_url}/workflow_tag/jobs/classification_job&limit={limit}&offset={offset}'
+    jobs_url = f'https://{blue_api_base_url}/workflow_tag/jobs/classification_job?limit={limit}&offset={offset}'
     request = urllib.request.Request(url=jobs_url)
     request.add_header("Content-type", "application/json")
     request.add_header("Accept", "application/json")
@@ -157,7 +158,7 @@ def get_file_from_abc_reffile_obj(referencefile_json_obj):
 
 
 def download_tei_files_for_references(reference_curies: List[str], output_dir: str, mod_abbreviation):
-    for reference_curie in reference_curies:
+    for reference_curie in tqdm(reference_curies, desc="Downloading TEI files"):
         all_reffiles_for_pap_api = f'https://{blue_api_base_url}/reference/referencefile/show_all/{reference_curie}'
         request = urllib.request.Request(url=all_reffiles_for_pap_api)
         request.add_header("Content-type", "application/json")
