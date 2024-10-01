@@ -12,3 +12,4 @@ services:
       - TRAINING_DOCS_DIR=/usr/src/app/training
       - GROBID_API_URL=${GROBID_API_URL}
       - TOPICS_TO_CLASSIFY=${TOPICS_TO_CLASSIFY}
+      - TMP_PATH=${TMP_PATH}
