@@ -259,8 +259,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Classify documents or train document classifiers')
     parser.add_argument("-m", "--mode", type=str, choices=['train', 'classify'], default="classify",
                         help="Mode of operation: train or classify")
-    parser.add_argument("-d", "--datatype_train", type=str, nargs="+", required=False,
-                        help="Datatype to train")
+    parser.add_argument("-d", "--datatype_train", type=str, required=False, help="Datatype to train")
     parser.add_argument("-e", "--embedding_model_path", type=str, help="Path to the word embedding model")
     parser.add_argument("-u", "--sections_to_use", type=str, nargs="+", help="Parts of the articles to use",
                         required=False)
