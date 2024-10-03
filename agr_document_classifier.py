@@ -300,7 +300,7 @@ if __name__ == '__main__':
         for (mod_id, datatype), jobs in mod_datatype_jobs.items():
             # TODO: download the model from the ABC
             mod_abbr = get_cached_mod_abbreviation_from_id(mod_id)
-            if datatype != "catalytic activity" or mod_id != get_cached_mod_id_from_abbreviation("WB"):
+            if datatype != "catalytic activity" or mod_abbr != "WB":
                 continue
             reference_curies = [get_curie_from_reference_id(job["reference_id"]) for job in tqdm(
                 jobs, desc="Converting reference ids into curies")]
