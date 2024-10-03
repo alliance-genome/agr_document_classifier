@@ -260,6 +260,7 @@ if __name__ == '__main__':
     parser.add_argument("-m", "--mode", type=str, choices=['train', 'classify'], default="classify",
                         help="Mode of operation: train or classify")
     parser.add_argument("-d", "--datatype_train", type=str, required=False, help="Datatype to train")
+    parser.add_argument("-M", "--mod_train", type=str, required=False, help="MOD to train")
     parser.add_argument("-e", "--embedding_model_path", type=str, help="Path to the word embedding model")
     parser.add_argument("-u", "--sections_to_use", type=str, nargs="+", help="Parts of the articles to use",
                         required=False)
@@ -326,7 +327,8 @@ if __name__ == '__main__':
             weighted_average_word_embedding=args.weighted_average_word_embedding,
             standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
             sections_to_use=args.sections_to_use)
-        save_classifier(classifier=classifier, file_path=f"/data/agr_document_classifier/{args.datatype_train}.joblib")
+        save_classifier(classifier=classifier, file_path=f"/data/agr_document_classifier/{args.mod_train}_"
+                                                         f"{args.datatype_train}.joblib")
         stats = {
             "selected_model": classifier_name,
             "precision": precision,
@@ -334,5 +336,6 @@ if __name__ == '__main__':
             "f_score": fscore,
             "fitted_parameters": classifier_params
         }
-        with open(f"/data/agr_document_classifier/{args.datatype_train}_stats.json", "w") as stats_file:
+        with open(f"/data/agr_document_classifier/{args.mod_train}_"
+                  f"{args.datatype_train}_stats.json", "w") as stats_file:
             json.dump(stats, stats_file, indent=4)
