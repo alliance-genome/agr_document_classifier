@@ -299,6 +299,7 @@ if __name__ == '__main__':
         logger.info("Finished loading jobs to classify from ABC ...")
         for (mod_id, datatype), jobs in mod_datatype_jobs.items():
             # TODO: download the model from the ABC
+            mod_abbr = get_cached_mod_abbreviation_from_id(mod_id)
             if datatype != "catalytic activity" or mod_id != get_cached_mod_id_from_abbreviation("WB"):
                 continue
             reference_curies = [get_curie_from_reference_id(job["reference_id"]) for job in tqdm(
@@ -308,13 +309,12 @@ if __name__ == '__main__':
                                               get_cached_mod_id_from_abbreviation(mod_id))
             files_loaded, classifications, conf_scores = classify_documents(
                 embedding_model_path=args.embedding_model_path,
-                classifier_model_path="/data/agr_document_classifier/classifier_model.joblib",
+                classifier_model_path=f"/data/agr_document_classifier/{mod_abbr}_{datatype}.joblib",
                 input_docs_dir="/data/agr_document_classifier/to_classify")
             for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
                 confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
                         conf_score < 0.75) else "High"
-                send_classification_tag_to_abc(file_path.replace("_", ":")[:-4],
-                                               get_cached_mod_abbreviation_from_id(mod_id),
+                send_classification_tag_to_abc(file_path.replace("_", ":")[:-4], mod_abbr,
                                                job_category_topic_map[datatype], negated=classification == 0,
                                                confidence_level=confidence_level)
             for job in jobs:
