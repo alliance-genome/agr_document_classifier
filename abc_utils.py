@@ -129,7 +129,7 @@ def get_tet_source_id(mod_abbreviation: str):
 
 
 def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, topic: str, negated: bool,
-                                   confidence_level: str):
+                                   confidence_level: str, tet_source_id):
     url = f'https://{blue_api_base_url}/topic_entity_tag'
     token = get_authentication_token()
     tet_data = {
@@ -137,7 +137,7 @@ def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, 
         "updated_by": "default_user",
         "topic": topic,
         "species": get_cached_mod_species_map()[mod_abbreviation],
-        "topic_entity_tag_source_id": "TO_DEFINE",
+        "topic_entity_tag_source_id": tet_source_id,
         "negated": negated,
         "confidence_level": confidence_level,
         "reference_curie": reference_curie,

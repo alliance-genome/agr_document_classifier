@@ -312,7 +312,7 @@ if __name__ == '__main__':
                 embedding_model_path=args.embedding_model_path,
                 classifier_model_path=f"/data/agr_document_classifier/{mod_abbr}_{datatype}.joblib",
                 input_docs_dir="/data/agr_document_classifier/to_classify")
-            get_tet_source_id(mod_abbreviation=mod_abbr)
+            tet_source_id = get_tet_source_id(mod_abbreviation=mod_abbr)
             for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
                 confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
                         conf_score < 0.75) else "High"
