@@ -210,7 +210,7 @@ def remove_stopwords(text):
 
 def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
     client = None
-    for file_path in glob.glob(input_docs_dir):
+    for file_path in glob.glob(os.path.join(input_docs_dir, "*")):
         file_obj = Path(file_path)
         if file_path.endswith(".tei") or file_path.endswith(".pdf"):
             with file_obj.open("rb") as fin:
@@ -252,7 +252,9 @@ def classify_documents(embedding_model_path: str, classifier_model_path: str, in
         files_loaded.append(file_path)
     del embedding_model
     X = np.array(X)
-    return files_loaded, classifier_model.predict(X), classifier_model.predict_proba(X)
+    classifications = classifier_model.predict(X)
+    confidence_scores = [classes_proba[1] for classes_proba in classifier_model.predict_proba(X)]
+    return files_loaded, classifications, confidence_scores
 
 
 if __name__ == '__main__':
@@ -321,6 +323,7 @@ if __name__ == '__main__':
                                                confidence_level=confidence_level)
             for job in jobs:
                 set_job_success(job)
+            # TODO: remove to_classify files
     else:
         # TODO: 1. download training docs for MOD and topid and store them in positive/negative dirs in fixed location
         #       2. save classifier and stats by uploading them to huggingface
