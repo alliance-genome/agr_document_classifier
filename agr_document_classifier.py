@@ -26,8 +26,8 @@ from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
 from abc_utils import get_jobs_to_classify, download_tei_files_for_references, get_curie_from_reference_id, \
-    get_cached_mod_id_from_abbreviation, send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
-    job_category_topic_map, set_job_success
+    send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
+    job_category_topic_map, set_job_success, get_tet_source_id
 from models import POSSIBLE_CLASSIFIERS
 
 nltk.download('stopwords')
@@ -298,19 +298,21 @@ if __name__ == '__main__':
             offset += limit
         logger.info("Finished loading jobs to classify from ABC ...")
         for (mod_id, datatype), jobs in mod_datatype_jobs.items():
-            # TODO: download the model from the ABC
+            # TODO: download model from the ABC
             mod_abbr = get_cached_mod_abbreviation_from_id(mod_id)
-            if datatype != "catalytic activity" or mod_abbr != "WB":
+            datatype = datatype.replace(" ", "_")
+            if datatype != "catalytic_activity" or mod_abbr != "WB":
                 continue
             reference_curies = [get_curie_from_reference_id(job["reference_id"]) for job in tqdm(
                 jobs, desc="Converting reference ids into curies")]
-            os.makedirs("/data/to_classify", exist_ok=True)
+            os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
             download_tei_files_for_references(reference_curies, "/data/agr_document_classifier/to_classify",
-                                              get_cached_mod_id_from_abbreviation(mod_id))
+                                              mod_abbr)
             files_loaded, classifications, conf_scores = classify_documents(
                 embedding_model_path=args.embedding_model_path,
                 classifier_model_path=f"/data/agr_document_classifier/{mod_abbr}_{datatype}.joblib",
                 input_docs_dir="/data/agr_document_classifier/to_classify")
+            get_tet_source_id(mod_abbreviation=mod_abbr)
             for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
                 confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
                         conf_score < 0.75) else "High"
@@ -321,7 +323,7 @@ if __name__ == '__main__':
                 set_job_success(job)
     else:
         # TODO: 1. download training docs for MOD and topid and store them in positive/negative dirs in fixed location
-        #       2. save classifier and stats by uploading them to the system
+        #       2. save classifier and stats by uploading them to huggingface
         classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
             embedding_model_path=args.embedding_model_path, training_data_dir="/data/agr_document_classifier/training",
             weighted_average_word_embedding=args.weighted_average_word_embedding,

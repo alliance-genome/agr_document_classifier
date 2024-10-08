@@ -88,6 +88,46 @@ def get_curie_from_reference_id(reference_id):
         logger.error(e)
 
 
+def get_tet_source_id(mod_abbreviation: str):
+    url = (f'https://{blue_api_base_url}/topic_entity_tag/source/ECO:0008004/abc_document_classifier/{mod_abbreviation}'
+           f'/{mod_abbreviation}')
+    request = urllib.request.Request(url=url)
+    request.add_header("Content-type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        with urllib.request.urlopen(request) as response:
+            resp = response.read().decode("utf8")
+            resp_obj = json.loads(resp)
+            return int(resp_obj["topic_entity_tag_source_id"])
+    except HTTPError as e:
+        if e.code == 404:
+            # Create a new source if not exists
+            create_url = f'https://{blue_api_base_url}/topic_entity_tag/source'
+            create_data = json.dumps({
+                "source_evidence_assertion": "ECO:0008004",
+                "source_method": "abc_document_classifier",
+                "validation_type": None,
+                "description": "Alliance document classification pipeline using machine learning to identify papers of "
+                               "interest for curation data types",
+                "data_provider": mod_abbreviation,
+                "secondary_data_provider_abbreviation": mod_abbreviation
+            }).encode('utf-8')
+            create_request = urllib.request.Request(url=create_url, data=create_data, method='POST')
+            create_request.add_header("Content-type", "application/json")
+            create_request.add_header("Accept", "application/json")
+            try:
+                with urllib.request.urlopen(create_request) as create_response:
+                    create_resp = create_response.read().decode("utf8")
+                    create_resp_obj = json.loads(create_resp)
+                    return int(create_resp_obj["topic_entity_tag_source_id"])
+            except HTTPError as create_e:
+                logger.error(f"Failed to create source: {create_e}")
+                raise
+        else:
+            logger.error(e)
+            raise
+
+
 def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, topic: str, negated: bool,
                                    confidence_level: str):
     url = f'https://{blue_api_base_url}/topic_entity_tag'
@@ -173,7 +213,7 @@ def download_tei_files_for_references(reference_curies: List[str], output_dir: s
                             ref_file["referencefile_mods"]):
                         file_content = get_file_from_abc_reffile_obj(ref_file)
                         with open(os.path.join(output_dir, reference_curie.replace(
-                                ":", "_") + ".pdf"), "wb") as out_file:
+                                ":", "_") + ".tei"), "wb") as out_file:
                             out_file.write(file_content)
         except HTTPError as e:
             logger.error(e)
