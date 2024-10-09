@@ -120,8 +120,7 @@ def get_tet_source_id(mod_abbreviation: str):
             try:
                 with urllib.request.urlopen(create_request) as create_response:
                     create_resp = create_response.read().decode("utf8")
-                    create_resp_obj = json.loads(create_resp)
-                    return create_resp_obj
+                    return int(create_resp)
             except HTTPError as create_e:
                 logger.error(f"Failed to create source: {create_e}")
         else:
