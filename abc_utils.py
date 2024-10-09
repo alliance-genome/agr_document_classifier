@@ -10,7 +10,7 @@ from cachetools import TTLCache
 from fastapi_okta.okta_utils import get_authentication_token, generate_headers
 from tqdm import tqdm
 
-blue_api_base_url = os.environ.get('API_SERVER', "literature-rest.alliancegenome.org")
+blue_api_base_url = os.environ.get('ABC_API_SERVER', "literature-rest.alliancegenome.org")
 
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,8 @@ def get_tet_source_id(mod_abbreviation: str):
         if e.code == 404:
             # Create a new source if not exists
             create_url = f'https://{blue_api_base_url}/topic_entity_tag/source'
+            token = get_authentication_token()
+            headers = generate_headers(token)
             create_data = json.dumps({
                 "source_evidence_assertion": "ECO:0008004",
                 "source_method": "abc_document_classifier",
@@ -112,17 +114,16 @@ def get_tet_source_id(mod_abbreviation: str):
                 "data_provider": mod_abbreviation,
                 "secondary_data_provider_abbreviation": mod_abbreviation
             }).encode('utf-8')
-            create_request = urllib.request.Request(url=create_url, data=create_data, method='POST')
+            create_request = urllib.request.Request(url=create_url, data=create_data, method='POST', headers=headers)
             create_request.add_header("Content-type", "application/json")
             create_request.add_header("Accept", "application/json")
             try:
                 with urllib.request.urlopen(create_request) as create_response:
                     create_resp = create_response.read().decode("utf8")
                     create_resp_obj = json.loads(create_resp)
-                    return int(create_resp_obj["topic_entity_tag_source_id"])
+                    return create_resp_obj
             except HTTPError as create_e:
                 logger.error(f"Failed to create source: {create_e}")
-                raise
         else:
             logger.error(e)
             raise
