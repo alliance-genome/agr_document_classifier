@@ -318,7 +318,7 @@ if __name__ == '__main__':
             for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
                 confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
                         conf_score < 0.75) else "High"
-                reference_curie = file_path.replace("_", ":")[:-4]
+                reference_curie = file_path.split("/")[-1].replace("_", ":")[:-4]
                 send_classification_tag_to_abc(reference_curie, mod_abbr, job_category_topic_map[datatype],
                                                negated=bool(classification == 0),
                                                confidence_level=confidence_level, tet_source_id=tet_source_id)
