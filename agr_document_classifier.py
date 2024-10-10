@@ -306,11 +306,11 @@ if __name__ == '__main__':
             if datatype != "catalytic_activity" or mod_abbr != "WB":
                 continue
             tet_source_id = get_tet_source_id(mod_abbreviation=mod_abbr)
-            reference_curies = [get_curie_from_reference_id(job["reference_id"]) for job in tqdm(
-                jobs, desc="Converting reference ids into curies")]
+            reference_curie_job_map = {get_curie_from_reference_id(job["reference_id"]): job for job in
+                                       tqdm(jobs, desc="Converting reference ids into curies")}
             os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
-            download_tei_files_for_references(reference_curies, "/data/agr_document_classifier/to_classify",
-                                              mod_abbr)
+            download_tei_files_for_references(list(reference_curie_job_map.keys()),
+                                              "/data/agr_document_classifier/to_classify", mod_abbr)
             files_loaded, classifications, conf_scores = classify_documents(
                 embedding_model_path=args.embedding_model_path,
                 classifier_model_path=f"/data/agr_document_classifier/{mod_abbr}_{datatype}.joblib",
@@ -318,12 +318,12 @@ if __name__ == '__main__':
             for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
                 confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
                         conf_score < 0.75) else "High"
-                send_classification_tag_to_abc(file_path.replace("_", ":")[:-4], mod_abbr,
-                                               job_category_topic_map[datatype], negated=bool(classification == 0),
+                reference_curie = file_path.replace("_", ":")[:-4]
+                send_classification_tag_to_abc(reference_curie, mod_abbr, job_category_topic_map[datatype],
+                                               negated=bool(classification == 0),
                                                confidence_level=confidence_level, tet_source_id=tet_source_id)
-                os.remove(f"/data/agr_document_classifier/to_classify/{file_path}")
-            for job in jobs:
-                set_job_success(job)
+                set_job_success(reference_curie_job_map[reference_curie])
+                os.remove(file_path)
     else:
         # TODO: 1. download training docs for MOD and topid and store them in positive/negative dirs in fixed location
         #       2. save classifier and stats by uploading them to huggingface
