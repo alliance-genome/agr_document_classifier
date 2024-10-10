@@ -132,7 +132,7 @@ def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, 
                                    confidence_level: str, tet_source_id):
     url = f'https://{blue_api_base_url}/topic_entity_tag'
     token = get_authentication_token()
-    tet_data = {
+    tet_data = json.dumps({
         "created_by": "default_user",
         "updated_by": "default_user",
         "topic": topic,
@@ -142,10 +142,10 @@ def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, 
         "confidence_level": confidence_level,
         "reference_curie": reference_curie,
         "force_insertion": True
-    }
+    }).encode('utf-8')
     headers = generate_headers(token)
     try:
-        response = requests.request("POST", url=url, json=tet_data, headers=headers)
+        response = requests.request("POST", url=url, data=tet_data, headers=headers)
         if response.status_code == 200:
             logger.info("TET created")
         else:
