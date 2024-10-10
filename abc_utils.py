@@ -145,11 +145,14 @@ def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, 
     }).encode('utf-8')
     headers = generate_headers(token)
     try:
-        response = requests.request("POST", url=url, data=tet_data, headers=headers)
-        if response.status_code == 200:
-            logger.info("TET created")
-        else:
-            logger.error(f"Failed to create TET: {str(tet_data)}")
+        create_request = urllib.request.Request(url=url, data=tet_data, method='POST', headers=headers)
+        create_request.add_header("Content-type", "application/json")
+        create_request.add_header("Accept", "application/json")
+        with urllib.request.urlopen(create_request) as create_response:
+            if create_response.status_code == 200:
+                logger.info("TET created")
+            else:
+                logger.error(f"Failed to create TET: {str(tet_data)}")
     except requests.exceptions.RequestException as e:
         logger.info(f"Error occurred during TET upload: {e}")
         return False

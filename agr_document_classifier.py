@@ -319,10 +319,14 @@ if __name__ == '__main__':
                 confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
                         conf_score < 0.75) else "High"
                 reference_curie = file_path.split("/")[-1].replace("_", ":")[:-4]
-                send_classification_tag_to_abc(reference_curie, mod_abbr, job_category_topic_map[datatype],
-                                               negated=bool(classification == 0),
-                                               confidence_level=confidence_level, tet_source_id=tet_source_id)
-                set_job_success(reference_curie_job_map[reference_curie])
+                result = send_classification_tag_to_abc(reference_curie, mod_abbr, job_category_topic_map[datatype],
+                                                        negated=bool(classification == 0),
+                                                        confidence_level=confidence_level, tet_source_id=tet_source_id)
+                if result is True:
+                    set_job_success(reference_curie_job_map[reference_curie])
+                else:
+                    # TODO: reset job status to "needs classification"
+                    pass
                 os.remove(file_path)
     else:
         # TODO: 1. download training docs for MOD and topid and store them in positive/negative dirs in fixed location
