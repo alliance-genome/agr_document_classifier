@@ -319,7 +319,7 @@ if __name__ == '__main__':
                 confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
                         conf_score < 0.75) else "High"
                 send_classification_tag_to_abc(file_path.replace("_", ":")[:-4], mod_abbr,
-                                               job_category_topic_map[datatype], negated=classification == 0,
+                                               job_category_topic_map[datatype], negated=bool(classification == 0),
                                                confidence_level=confidence_level, tet_source_id=tet_source_id)
                 os.remove(f"/data/agr_document_classifier/to_classify/{file_path}")
             for job in jobs:
