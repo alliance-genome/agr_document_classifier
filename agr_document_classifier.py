@@ -309,8 +309,12 @@ if __name__ == '__main__':
             reference_curie_job_map = {get_curie_from_reference_id(job["reference_id"]): job for job in
                                        tqdm(jobs, desc="Converting reference ids into curies")}
             os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
-            download_tei_files_for_references(list(reference_curie_job_map.keys()),
-                                              "/data/agr_document_classifier/to_classify", mod_abbr)
+            if len(os.listdir("/data/agr_document_classifier/to_classify")) == 0:
+                logger.info("empty file dir. Downloading TEI files from ABC server")
+                download_tei_files_for_references(list(reference_curie_job_map.keys()),
+                                                  "/data/agr_document_classifier/to_classify", mod_abbr)
+            else:
+                logger.info("using existing TEI files")
             files_loaded, classifications, conf_scores = classify_documents(
                 embedding_model_path=args.embedding_model_path,
                 classifier_model_path=f"/data/agr_document_classifier/{mod_abbr}_{datatype}.joblib",
