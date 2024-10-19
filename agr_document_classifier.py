@@ -27,7 +27,7 @@ from tqdm import tqdm
 
 from abc_utils import get_jobs_to_classify, download_tei_files_for_references, get_curie_from_reference_id, \
     send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
-    job_category_topic_map, set_job_success, get_tet_source_id
+    job_category_topic_map, set_job_success, get_tet_source_id, set_job_started
 from models import POSSIBLE_CLASSIFIERS
 
 nltk.download('stopwords')
@@ -327,6 +327,7 @@ if __name__ == '__main__':
                                                         negated=bool(classification == 0),
                                                         confidence_level=confidence_level, tet_source_id=tet_source_id)
                 if result is True:
+                    set_job_started(reference_curie_job_map[reference_curie])
                     set_job_success(reference_curie_job_map[reference_curie])
                 else:
                     # TODO: reset job status to "needs classification"

@@ -149,7 +149,7 @@ def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, 
         create_request.add_header("Content-type", "application/json")
         create_request.add_header("Accept", "application/json")
         with urllib.request.urlopen(create_request) as create_response:
-            if create_response.status_code == 200:
+            if create_response.getcode() == 201:
                 logger.info("TET created")
             else:
                 logger.error(f"Failed to create TET: {str(tet_data)}")
@@ -177,15 +177,30 @@ def get_jobs_to_classify(limit: int = 1000, offset: int = 0):
         logger.error(e)
 
 
-def set_job_success(job):
-    url = f'https://{blue_api_base_url}/workflow_tag/job/success/{job["reference_workflow_tag_id"]}'
-    request = urllib.request.Request(url=url)
+def set_job_started(job):
+    url = f'https://{blue_api_base_url}/workflow_tag/job/started/{job["reference_workflow_tag_id"]}'
+    request = urllib.request.Request(url=url, method='POST')
     request.add_header("Content-type", "application/json")
     request.add_header("Accept", "application/json")
     try:
         urllib.request.urlopen(request)
+        return True
     except HTTPError as e:
         logger.error(e)
+        return False
+
+
+def set_job_success(job):
+    url = f'https://{blue_api_base_url}/workflow_tag/job/success/{job["reference_workflow_tag_id"]}'
+    request = urllib.request.Request(url=url, method='POST')
+    request.add_header("Content-type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        urllib.request.urlopen(request)
+        return True
+    except HTTPError as e:
+        logger.error(e)
+        return False
 
 
 def get_file_from_abc_reffile_obj(referencefile_json_obj):
