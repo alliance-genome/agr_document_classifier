@@ -334,7 +334,7 @@ if __name__ == '__main__':
                     pass
                 os.remove(file_path)
     else:
-        # TODO: 1. download training docs for MOD and topid and store them in positive/negative dirs in fixed location
+        # TODO: 1. download training docs for MOD and topic and store them in positive/negative dirs in fixed location
         #       2. save classifier and stats by uploading them to huggingface
         classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
             embedding_model_path=args.embedding_model_path, training_data_dir="/data/agr_document_classifier/training",
