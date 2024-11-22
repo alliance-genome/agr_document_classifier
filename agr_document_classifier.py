@@ -117,7 +117,7 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
                     text = title
                 if "fulltext" in sections_to_use:
                     text += " " + fulltext
-                if abstract in sections_to_use:
+                if "abstract" in sections_to_use:
                     text += " " + abstract
             if text:
                 text = remove_stopwords(text)
