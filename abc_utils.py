@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 import urllib.request
 from typing import List
 from urllib.error import HTTPError
@@ -18,6 +19,18 @@ cache = TTLCache(maxsize=100, ttl=7200)
 job_category_topic_map = {
     "catalytic_activity": "ATP:0000061"
 }
+
+def report_progress(current, total, start_time, last_reported, interval_percentage):
+    if interval_percentage <= 0:
+        return last_reported  # No progress reporting if interval is 0 or negative
+
+    percent_complete = (current / total) * 100
+    if percent_complete - last_reported >= interval_percentage or current == total:
+        elapsed_time = time.time() - start_time
+        logger.info(f"Progress: {percent_complete:.2f}% complete ({current}/{total}), "
+                    f"Elapsed time: {elapsed_time:.2f}s")
+        last_reported = percent_complete
+    return last_reported
 
 def get_mod_species_map():
     url = f'https://{blue_api_base_url}/mod/taxons/default'
@@ -195,8 +208,12 @@ def get_file_from_abc_reffile_obj(referencefile_json_obj):
         logger.error(f"Error occurred for accessing/retrieving data from {file_download_api}: error={e}")
         return None
 
-def download_tei_files_for_references(reference_curies: List[str], output_dir: str, mod_abbreviation):
-    for reference_curie in reference_curies:
+def download_tei_files_for_references(reference_curies: List[str], output_dir: str, mod_abbreviation, progress_interval=0.0):
+    total_references = len(reference_curies)
+    start_time = time.time()
+    last_reported = 0
+
+    for idx, reference_curie in enumerate(reference_curies, start=1):
         all_reffiles_for_pap_api = f'https://{blue_api_base_url}/reference/referencefile/show_all/{reference_curie}'
         request = urllib.request.Request(url=all_reffiles_for_pap_api)
         request.add_header("Content-type", "application/json")
@@ -210,8 +227,23 @@ def download_tei_files_for_references(reference_curies: List[str], output_dir: s
                             ref_file_mod["mod_abbreviation"] == mod_abbreviation for ref_file_mod in
                             ref_file["referencefile_mods"]):
                         file_content = get_file_from_abc_reffile_obj(ref_file)
-                        with open(os.path.join(output_dir, reference_curie.replace(
-                                ":", "_") + ".tei"), "wb") as out_file:
-                            out_file.write(file_content)
+                        if file_content:
+                            with open(os.path.join(output_dir, reference_curie.replace(":", "_") + ".tei"), "wb") as out_file:
+                                out_file.write(file_content)
         except HTTPError as e:
             logger.error(e)
+
+        # Report progress
+        last_reported = report_progress(idx, total_references, start_time, last_reported, progress_interval)
+
+def download_classification_model(mod_abbreviation: str, topic: str):
+    # TODO: Implement this function if needed
+    pass
+
+def upload_classification_model(mod_abbreviation: str, topic: str, model_path: str):
+    # TODO: Implement this function if needed
+    pass
+
+def get_training_set_from_abc(mod_abbreviation: str, topic: str):
+    # TODO: Implement this function if needed
+    pass
