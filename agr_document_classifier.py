@@ -38,16 +38,15 @@ nltk.download('punkt')
 logger = logging.getLogger(__name__)
 
 
-def report_progress(current, total, start_time, last_reported, interval_percentage):
-    if interval_percentage <= 0:
+def report_progress(current, start_time, last_reported, interval_docs):
+    if interval_docs <= 0:
         return last_reported  # No progress reporting if interval is 0 or negative
 
-    percent_complete = (current / total) * 100
-    if percent_complete - last_reported >= interval_percentage or current == total:
+    if current - last_reported >= interval_docs or current == last_reported:
         elapsed_time = time.time() - start_time
-        logger.info(f"Progress: {percent_complete:.2f}% complete ({current}/{total}), "
+        logger.info(f"Progress: {current} documents processed, "
                     f"Elapsed time: {elapsed_time:.2f}s")
-        last_reported = percent_complete
+        last_reported = current
     return last_reported
 
 
@@ -208,7 +207,7 @@ def classify_documents(embedding_model_path: str, classifier_model_path: str, in
         for idx, result in enumerate(pool.imap(process_and_classify_document, process_args), start=1):
             results.append(result)
             # Report progress
-            last_reported = report_progress(idx, total_docs, start_time, last_reported, args.progress_interval)
+            last_reported = report_progress(idx, start_time, last_reported, args.progress_interval)
 
     files_loaded, classifications, confidence_scores = zip(*results)
     return files_loaded, classifications, confidence_scores
@@ -298,7 +297,7 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
                 y.append(int(label == "positive"))
 
             # Report progress
-            last_reported = report_progress(idx, total_docs, start_time, last_reported, args.progress_interval)
+            last_reported = report_progress(idx, start_time, last_reported, args.progress_interval)
 
     del embedding_model
     logger.info("Finished loading training set.")
@@ -374,8 +373,13 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--log_level", type=str,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help="Set the logging level")
-    parser.add_argument("-p", "--progress_interval", type=float, default=0.0,
-                        help="Set the progress reporting interval in percentage (e.g., 25 for 25%)")
+    parser.add_argument(
+        "-p",
+        "--progress_interval",
+        type=int,
+        default=10000,
+        help="Set the progress reporting interval in number of documents (e.g., 10000)."
+    )
     parser.add_argument("-c", "--num_processes", type=int, default=4,
                         help="Number of processes to use for multiprocessing. "
                              "Default is 4. Use 0 to utilize all available CPU cores.")
@@ -401,10 +405,13 @@ if __name__ == '__main__':
 
         start_time = time.time()
         last_reported = 0
-        total_jobs_estimate = 10000  # Adjust this number if you have an estimate
+
+        total_jobs_processed = 0  # Initialize total jobs processed
 
         while all_jobs := get_jobs_to_classify(limit, offset):
             total_jobs = len(all_jobs)
+            total_jobs_processed += total_jobs  # Update total jobs processed
+
             for i, job in enumerate(all_jobs, start=1):
                 reference_id = job["reference_id"]
                 datatype = job["job_name"].replace("_classification_job", "")
@@ -413,10 +420,11 @@ if __name__ == '__main__':
                     mod_datatype_jobs[(mod_id, datatype)].append(job)
                     jobs_already_added.add((mod_id, datatype, reference_id))
 
-                # Report progress
-                current = offset + i
-                last_reported = report_progress(current, total_jobs_estimate, start_time, last_reported,
-                                                args.progress_interval)
+                # Update current progress
+                current = total_jobs_processed - (total_jobs - i)
+                last_reported = report_progress(
+                    current, start_time, last_reported, args.progress_interval
+                )
             offset += limit
 
         logger.info("Finished loading jobs to classify from ABC ...")
@@ -464,7 +472,7 @@ if __name__ == '__main__':
                 os.remove(file_path)
 
                 # Report progress
-                last_reported = report_progress(idx, total_files, start_time, last_reported, args.progress_interval)
+                last_reported = report_progress(idx, start_time, last_reported, args.progress_interval)
 
     else:
         # TODO: 1. download training docs for MOD and topic and store them in positive/negative dirs in fixed location
