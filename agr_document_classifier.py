@@ -37,6 +37,7 @@ nltk.download('punkt')
 # Configure the logging in the main script
 logger = logging.getLogger(__name__)
 
+
 def report_progress(current, total, start_time, last_reported, interval_percentage):
     if interval_percentage <= 0:
         return last_reported  # No progress reporting if interval is 0 or negative
@@ -48,6 +49,7 @@ def report_progress(current, total, start_time, last_reported, interval_percenta
                     f"Elapsed time: {elapsed_time:.2f}s")
         last_reported = percent_complete
     return last_reported
+
 
 def get_document_embedding(model, document, weighted_average_word_embedding: bool = False,
                            standardize_embeddings: bool = False, normalize_embeddings: bool = False):

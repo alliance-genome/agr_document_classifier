@@ -20,6 +20,7 @@ job_category_topic_map = {
     "catalytic_activity": "ATP:0000061"
 }
 
+
 def report_progress(current, total, start_time, last_reported, interval_percentage):
     if interval_percentage <= 0:
         return last_reported  # No progress reporting if interval is 0 or negative
@@ -31,6 +32,7 @@ def report_progress(current, total, start_time, last_reported, interval_percenta
                     f"Elapsed time: {elapsed_time:.2f}s")
         last_reported = percent_complete
     return last_reported
+
 
 def get_mod_species_map():
     url = f'https://{blue_api_base_url}/mod/taxons/default'
@@ -45,6 +47,7 @@ def get_mod_species_map():
     except HTTPError as e:
         logger.error(e)
 
+
 def get_mod_id_from_abbreviation(mod_abbreviation):
     url = f'https://{blue_api_base_url}/mod/{mod_abbreviation}'
     request = urllib.request.Request(url=url)
@@ -58,10 +61,12 @@ def get_mod_id_from_abbreviation(mod_abbreviation):
     except HTTPError as e:
         logger.error(e)
 
+
 def get_cached_mod_species_map():
     if 'mod_species_map' not in cache:
         cache['mod_species_map'] = get_mod_species_map()
     return cache['mod_species_map']
+
 
 def get_cached_mod_id_from_abbreviation(mod_abbreviation):
     if 'mod_abbreviation_id' not in cache:
@@ -70,12 +75,14 @@ def get_cached_mod_id_from_abbreviation(mod_abbreviation):
         cache['mod_abbreviation_id'][mod_abbreviation] = get_mod_id_from_abbreviation(mod_abbreviation)
     return cache['mod_abbreviation_id'][mod_abbreviation]
 
+
 def get_cached_mod_abbreviation_from_id(mod_id):
     if 'mod_id_abbreviation' not in cache:
         cache['mod_id_abbreviation'] = {}
         for mod_abbreviation in get_cached_mod_species_map().keys():
             cache['mod_id_abbreviation'][get_cached_mod_id_from_abbreviation(mod_abbreviation)] = mod_abbreviation
     return cache['mod_id_abbreviation'][mod_id]
+
 
 def get_curie_from_reference_id(reference_id):
     url = f'https://{blue_api_base_url}/reference/{reference_id}'
@@ -89,6 +96,7 @@ def get_curie_from_reference_id(reference_id):
             return resp_obj["curie"]
     except HTTPError as e:
         logger.error(e)
+
 
 def get_tet_source_id(mod_abbreviation: str):
     url = (f'https://{blue_api_base_url}/topic_entity_tag/source/ECO:0008004/abc_document_classifier/{mod_abbreviation}'
@@ -129,6 +137,7 @@ def get_tet_source_id(mod_abbreviation: str):
             logger.error(e)
             raise
 
+
 def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, topic: str, negated: bool,
                                    confidence_level: str, tet_source_id):
     url = f'https://{blue_api_base_url}/topic_entity_tag/'
@@ -159,6 +168,7 @@ def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, 
         return False
     return True
 
+
 def get_jobs_to_classify(limit: int = 1000, offset: int = 0):
     jobs_url = f'https://{blue_api_base_url}/workflow_tag/jobs/classification_job?limit={limit}&offset={offset}'
     request = urllib.request.Request(url=jobs_url)
@@ -172,6 +182,7 @@ def get_jobs_to_classify(limit: int = 1000, offset: int = 0):
     except HTTPError as e:
         logger.error(e)
 
+
 def set_job_started(job):
     url = f'https://{blue_api_base_url}/workflow_tag/job/started/{job["reference_workflow_tag_id"]}'
     request = urllib.request.Request(url=url, method='POST')
@@ -183,6 +194,7 @@ def set_job_started(job):
     except HTTPError as e:
         logger.error(e)
         return False
+
 
 def set_job_success(job):
     url = f'https://{blue_api_base_url}/workflow_tag/job/success/{job["reference_workflow_tag_id"]}'
@@ -196,6 +208,7 @@ def set_job_success(job):
         logger.error(e)
         return False
 
+
 def get_file_from_abc_reffile_obj(referencefile_json_obj):
     file_download_api = (f"https://{blue_api_base_url}/reference/referencefile/download_file/"
                          f"{referencefile_json_obj['referencefile_id']}")
@@ -207,6 +220,7 @@ def get_file_from_abc_reffile_obj(referencefile_json_obj):
     except requests.exceptions.RequestException as e:
         logger.error(f"Error occurred for accessing/retrieving data from {file_download_api}: error={e}")
         return None
+
 
 def download_tei_files_for_references(reference_curies: List[str], output_dir: str, mod_abbreviation, progress_interval=0.0):
     total_references = len(reference_curies)
@@ -236,13 +250,16 @@ def download_tei_files_for_references(reference_curies: List[str], output_dir: s
         # Report progress
         last_reported = report_progress(idx, total_references, start_time, last_reported, progress_interval)
 
+
 def download_classification_model(mod_abbreviation: str, topic: str):
     # TODO: Implement this function if needed
     pass
 
+
 def upload_classification_model(mod_abbreviation: str, topic: str, model_path: str):
     # TODO: Implement this function if needed
     pass
+
 
 def get_training_set_from_abc(mod_abbreviation: str, topic: str):
     # TODO: Implement this function if needed
