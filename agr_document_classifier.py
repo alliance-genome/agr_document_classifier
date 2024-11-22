@@ -5,6 +5,8 @@ import logging
 import os
 import os.path
 import re
+import sys
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Tuple, List
@@ -23,7 +25,6 @@ from nltk.tokenize import word_tokenize
 from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
-from tqdm import tqdm
 
 from abc_utils import get_jobs_to_classify, download_tei_files_for_references, get_curie_from_reference_id, \
     send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
@@ -33,15 +34,21 @@ from models import POSSIBLE_CLASSIFIERS
 nltk.download('stopwords')
 nltk.download('punkt')
 
-
-# Configure the logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-
+# Configure the logging in the main script
 logger = logging.getLogger(__name__)
+
+
+def report_progress(current, total, start_time, last_reported, interval_percentage):
+    if interval_percentage <= 0:
+        return last_reported  # No progress reporting if interval is 0 or negative
+
+    percent_complete = (current / total) * 100
+    if percent_complete - last_reported >= interval_percentage or current == total:
+        elapsed_time = time.time() - start_time
+        logger.info(f"Progress: {percent_complete:.2f}% complete ({current}/{total}), "
+                    f"Elapsed time: {elapsed_time:.2f}s")
+        last_reported = percent_complete
+    return last_reported
 
 
 def get_document_embedding(model, document, weighted_average_word_embedding: bool = False,
@@ -98,8 +105,12 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     # For each document in your training data, extract embeddings and labels
     logger.info("Loading training set")
     for label in ["positive", "negative"]:
-        for _, fulltext, title, abstract in tqdm(get_documents(os.path.join(training_data_dir, label, "*")),
-                                                 desc=f"Reading {label} documents"):
+        documents = list(get_documents(os.path.join(training_data_dir, label, "*")))
+        total_docs = len(documents)
+        start_time = time.time()
+        last_reported = 0
+
+        for idx, (_, fulltext, title, abstract) in enumerate(documents, start=1):
             text = ""
             if not sections_to_use:
                 text = fulltext
@@ -108,7 +119,7 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
                     text = title
                 if "fulltext" in sections_to_use:
                     text += " " + fulltext
-                if abstract in sections_to_use:
+                if "abstract" in sections_to_use:
                     text += " " + abstract
             if text:
                 text = remove_stopwords(text)
@@ -119,6 +130,10 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
                                                         normalize_embeddings=normalize_embeddings)
                 X.append(text_embedding)
                 y.append(int(label == "positive"))
+
+            # Report progress
+            last_reported = report_progress(idx, total_docs, start_time, last_reported, args.progress_interval)
+
     del embedding_model
     logger.info("Finished loading training set.")
     logger.info(f"Dataset size: {str(len(X))}")
@@ -184,6 +199,7 @@ def load_classifier(file_path):
 
 def get_sentences_from_tei_section(section):
     sentences = []
+    error_count = 0  # Initialize error count
     for paragraph in section.paragraphs:
         if isinstance(paragraph, TextWithRefs):
             paragraph = [paragraph]
@@ -196,7 +212,9 @@ def get_sentences_from_tei_section(section):
                 ):
                     sentences.append(re.sub('<[^<]+>', '', sentence.text))
             except Exception as e:
-                logger.error(f"Error parsing sentence {str(e)}")
+                error_count += 1
+                if error_count == 1 or error_count % 100 == 0:
+                    logger.error(f"Error parsing sentences. Total errors so far: {error_count}")
     sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
     return sentences
 
@@ -208,7 +226,8 @@ def remove_stopwords(text):
     return ' '.join(filtered_text)
 
 
-def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
+def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
+    documents = []
     client = None
     for file_path in glob.glob(os.path.join(input_docs_dir, "*")):
         file_obj = Path(file_path)
@@ -228,7 +247,7 @@ def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
                 try:
                     article: Article = TEI.parse(file_stream, figures=True)
                 except Exception as e:
-                    logging.error(f"Error parsing TEI file for {str(file_path)}: {str(e)}")
+                    logger.error(f"Error parsing TEI file for {str(file_path)}: {str(e)}")
                     continue
                 sentences = []
                 for section in article.sections:
@@ -238,7 +257,8 @@ def get_documents(input_docs_dir: str) -> Tuple[str, str, str]:
                     if section.name == "ABSTRACT":
                         abstract = " ".join(get_sentences_from_tei_section(section))
                         break
-                yield file_path, " ".join(sentences), article.title, abstract
+                documents.append((file_path, " ".join(sentences), article.title, abstract))
+    return documents
 
 
 def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
@@ -246,10 +266,20 @@ def classify_documents(embedding_model_path: str, classifier_model_path: str, in
     classifier_model = load_classifier(classifier_model_path)
     X = []
     files_loaded = []
-    for file_path, fulltext, title, abstract in get_documents(input_docs_dir=input_docs_dir):
+
+    documents = get_documents(input_docs_dir=input_docs_dir)
+    total_docs = len(documents)
+    start_time = time.time()
+    last_reported = 0
+
+    for idx, (file_path, fulltext, title, abstract) in enumerate(documents, start=1):
         doc_embedding = get_document_embedding(embedding_model, fulltext)
         X.append(doc_embedding)
         files_loaded.append(file_path)
+
+        # Report progress
+        last_reported = report_progress(idx, total_docs, start_time, last_reported, args.progress_interval)
+
     del embedding_model
     X = np.array(X)
     classifications = classifier_model.predict(X)
@@ -278,27 +308,50 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--log_level", type=str,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help="Set the logging level")
+    parser.add_argument("-p", "--progress_interval", type=float, default=0.0,
+                        help="Set the progress reporting interval in percentage (e.g., 25 for 25%)")
 
     args = parser.parse_args()
 
-    logging.basicConfig(level=getattr(logging, args.log_level.upper(), 0))
+    # Configure logging based on the log_level argument
+    logging.basicConfig(
+        level=getattr(logging, args.log_level.upper(), logging.INFO),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        stream=sys.stdout
+    )
+
+    logger = logging.getLogger(__name__)
+
     if args.mode == "classify":
         mod_datatype_jobs = defaultdict(list)
         limit = 1000
         offset = 0
         jobs_already_added = set()
         logger.info("Loading jobs to classify from ABC ...")
+
+        start_time = time.time()
+        last_reported = 0
+        total_jobs_estimate = 10000  # Adjust this number if you have an estimate
+
         while all_jobs := get_jobs_to_classify(limit, offset):
-            logger.info("Loaded batch of 1000 jobs")
-            for job in all_jobs:
+            total_jobs = len(all_jobs)
+            for i, job in enumerate(all_jobs, start=1):
                 reference_id = job["reference_id"]
                 datatype = job["job_name"].replace("_classification_job", "")
                 mod_id = job["mod_id"]
                 if (mod_id, datatype, reference_id) not in jobs_already_added:
                     mod_datatype_jobs[(mod_id, datatype)].append(job)
                     jobs_already_added.add((mod_id, datatype, reference_id))
+
+                # Report progress
+                current = offset + i
+                last_reported = report_progress(current, total_jobs_estimate, start_time, last_reported,
+                                                args.progress_interval)
             offset += limit
+
         logger.info("Finished loading jobs to classify from ABC ...")
+
         for (mod_id, datatype), jobs in mod_datatype_jobs.items():
             # TODO: download model from the ABC
             mod_abbr = get_cached_mod_abbreviation_from_id(mod_id)
@@ -306,20 +359,25 @@ if __name__ == '__main__':
             if datatype != "catalytic_activity" or mod_abbr != "WB":
                 continue
             tet_source_id = get_tet_source_id(mod_abbreviation=mod_abbr)
-            reference_curie_job_map = {get_curie_from_reference_id(job["reference_id"]): job for job in
-                                       tqdm(jobs, desc="Converting reference ids into curies")}
+            reference_curie_job_map = {get_curie_from_reference_id(job["reference_id"]): job for job in jobs}
             os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
             if len(os.listdir("/data/agr_document_classifier/to_classify")) == 0:
-                logger.info("empty file dir. Downloading TEI files from ABC server")
+                logger.info("Empty file dir. Downloading TEI files from ABC server")
                 download_tei_files_for_references(list(reference_curie_job_map.keys()),
                                                   "/data/agr_document_classifier/to_classify", mod_abbr)
             else:
-                logger.info("using existing TEI files")
+                logger.info("Using existing TEI files")
+
             files_loaded, classifications, conf_scores = classify_documents(
                 embedding_model_path=args.embedding_model_path,
                 classifier_model_path=f"/data/agr_document_classifier/{mod_abbr}_{datatype}.joblib",
                 input_docs_dir="/data/agr_document_classifier/to_classify")
-            for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
+
+            total_files = len(files_loaded)
+            start_time = time.time()
+            last_reported = 0
+
+            for idx, (file_path, classification, conf_score) in enumerate(zip(files_loaded, classifications, conf_scores), start=1):
                 confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
                         conf_score < 0.75) else "High"
                 reference_curie = file_path.split("/")[-1].replace("_", ":")[:-4]
@@ -333,11 +391,16 @@ if __name__ == '__main__':
                     # TODO: reset job status to "needs classification"
                     pass
                 os.remove(file_path)
+
+                # Report progress
+                last_reported = report_progress(idx, total_files, start_time, last_reported, args.progress_interval)
+
     else:
         # TODO: 1. download training docs for MOD and topic and store them in positive/negative dirs in fixed location
         #       2. save classifier and stats by uploading them to huggingface
         classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
-            embedding_model_path=args.embedding_model_path, training_data_dir="/data/agr_document_classifier/training",
+            embedding_model_path=args.embedding_model_path,
+            training_data_dir="/data/agr_document_classifier/training",
             weighted_average_word_embedding=args.weighted_average_word_embedding,
             standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
             sections_to_use=args.sections_to_use)
