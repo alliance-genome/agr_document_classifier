@@ -52,18 +52,28 @@ def report_progress(current, total, start_time, last_reported, interval_percenta
 
 
 def get_document_embedding(model, document, weighted_average_word_embedding: bool = False,
-                           standardize_embeddings: bool = False, normalize_embeddings: bool = False):
-    # Split the document into words and extract the embedding for each word
+                           standardize_embeddings: bool = False, normalize_embeddings: bool = False,
+                           word_to_index=None):
+    # Split the document into words
     words = document.split()
     if isinstance(model, KeyedVectors):
-        embeddings = [model[word] for word in words if word in model]
-        word_to_index = model.key_to_index
+        vocab = set(model.key_to_index.keys())
+        valid_words = [word for word in words if word in vocab]
+        embeddings = model[valid_words]
+        if word_to_index is None:
+            word_to_index = model.key_to_index
     else:
-        embeddings = [model.get_word_vector(word) for word in words if word in model.words]
-        word_to_index = {model.words[i]: i for i in range(1, len(model.words))}
+        vocab = set(model.get_words())
+        valid_words = [word for word in words if word in vocab]
+        embeddings = np.array([model.get_word_vector(word) for word in valid_words])
+        if word_to_index is None:
+            word_to_index = {word: idx for idx, word in enumerate(model.get_words())}
+
+    if embeddings.size == 0:
+        return np.zeros(model.get_dimension())
 
     epsilon = 1e-10
-    embeddings_2d = np.array([vec if np.linalg.norm(vec) > 0 else np.full(vec.shape, epsilon) for vec in embeddings])
+    embeddings_2d = embeddings
 
     if standardize_embeddings:
         # Standardize the embeddings
@@ -76,7 +86,7 @@ def get_document_embedding(model, document, weighted_average_word_embedding: boo
         embeddings_2d /= norm
 
     if weighted_average_word_embedding:
-        weights = [word_to_index[word] / len(word_to_index) for word in words if word in word_to_index]
+        weights = np.array([word_to_index[word] / len(word_to_index) for word in valid_words])
         doc_embedding = np.average(embeddings_2d, axis=0, weights=weights)
     else:
         doc_embedding = np.mean(embeddings_2d, axis=0)
@@ -93,19 +103,174 @@ def load_embedding_model(model_path):
     return model
 
 
+def process_single_document(args):
+    file_path, client_base_url = args
+    client = None
+    file_obj = Path(file_path)
+    if file_path.endswith(".tei") or file_path.endswith(".pdf"):
+        with file_obj.open("rb") as fin:
+            if file_path.endswith(".pdf"):
+                if client is None:
+                    client = Client(base_url=client_base_url, timeout=1000, verify_ssl=False)
+                form = ProcessForm(
+                    segment_sentences="1",
+                    input_=File(file_name=file_obj.name, payload=fin.read(), mime_type="application/pdf"))
+                r = process_fulltext_document.sync_detailed(client=client, multipart_data=form)
+                file_stream = r.content
+            else:
+                file_stream = fin.read()
+            try:
+                article: Article = TEI.parse(file_stream, figures=True)
+            except Exception as e:
+                logger.error(f"Error parsing TEI file for {str(file_path)}: {str(e)}")
+                return None
+            sentences = []
+            for section in article.sections:
+                sentences.extend(get_sentences_from_tei_section(section))
+            abstract = ""
+            for section in article.sections:
+                if section.name == "ABSTRACT":
+                    abstract = " ".join(get_sentences_from_tei_section(section))
+                    break
+            return (file_path, " ".join(sentences), article.title, abstract)
+    else:
+        return None
+
+
+def get_documents(input_docs_dir: str, num_processes: int) -> List[Tuple[str, str, str, str]]:
+    from multiprocessing import Pool, cpu_count
+
+    file_paths = glob.glob(os.path.join(input_docs_dir, "*"))
+    client_base_url = os.environ.get("GROBID_API_URL")
+
+    # Prepare arguments for each process
+    process_args = [(file_path, client_base_url) for file_path in file_paths]
+
+    if num_processes <= 0:
+        num_processes = cpu_count()
+
+    with Pool(processes=num_processes) as pool:
+        results = pool.map(process_single_document, process_args)
+
+    # Filter out None results
+    documents = [result for result in results if result is not None]
+
+    return documents
+
+
+def process_and_classify_document(args):
+    document_data, embedding_model_path, classifier_model_path, word_to_index = args
+    file_path, fulltext, title, abstract = document_data
+
+    # Load models (ensure they are loaded once per process)
+    if not hasattr(process_and_classify_document, 'embedding_model'):
+        process_and_classify_document.embedding_model = load_embedding_model(embedding_model_path)
+    if not hasattr(process_and_classify_document, 'classifier_model'):
+        process_and_classify_document.classifier_model = load_classifier(classifier_model_path)
+
+    embedding_model = process_and_classify_document.embedding_model
+    classifier_model = process_and_classify_document.classifier_model
+
+    doc_embedding = get_document_embedding(embedding_model, fulltext, word_to_index=word_to_index)
+    classification = classifier_model.predict([doc_embedding])[0]
+    confidence_score = classifier_model.predict_proba([doc_embedding])[0][1]
+    return file_path, classification, confidence_score
+
+
+def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str, num_processes: int):
+    from multiprocessing import Pool, cpu_count
+
+    embedding_model = load_embedding_model(model_path=embedding_model_path)
+    classifier_model = load_classifier(classifier_model_path)
+
+    documents = get_documents(input_docs_dir=input_docs_dir, num_processes=num_processes)
+    total_docs = len(documents)
+    start_time = time.time()
+    last_reported = 0
+
+    # Precompute word_to_index
+    if isinstance(embedding_model, KeyedVectors):
+        word_to_index = embedding_model.key_to_index
+    else:
+        word_to_index = {word: idx for idx, word in enumerate(embedding_model.get_words())}
+
+    # Since we cannot pass the entire model to each process without significant overhead,
+    # we will load the models within each process
+
+    # Prepare arguments for each process
+    process_args = [(doc, embedding_model_path, classifier_model_path, word_to_index) for doc in documents]
+
+    if num_processes <= 0:
+        num_processes = cpu_count()
+
+    results = []
+    with Pool(processes=num_processes) as pool:
+        for idx, result in enumerate(pool.imap(process_and_classify_document, process_args), start=1):
+            results.append(result)
+            # Report progress
+            last_reported = report_progress(idx, total_docs, start_time, last_reported, args.progress_interval)
+
+    files_loaded, classifications, confidence_scores = zip(*results)
+    return files_loaded, classifications, confidence_scores
+
+
+def save_classifier(classifier, file_path):
+    dump(classifier, file_path)
+    # TODO: upload model to ABC
+
+
+def load_classifier(file_path):
+    # TODO download classifier from ABC if not present locally
+    return load(file_path)
+
+
+def get_sentences_from_tei_section(section):
+    sentences = []
+    error_count = 0  # Initialize error count
+    for paragraph in section.paragraphs:
+        if isinstance(paragraph, TextWithRefs):
+            paragraph = [paragraph]
+        for sentence in paragraph:
+            try:
+                if not sentence.text.isdigit() and not (
+                        len(section.paragraphs) == 3 and
+                        section.paragraphs[0][0].text in ['\n', ' '] and
+                        section.paragraphs[-1][0].text in ['\n', ' ']
+                ):
+                    sentences.append(re.sub('<[^<]+>', '', sentence.text))
+            except Exception as e:
+                error_count += 1
+                if error_count == 1 or error_count % 100 == 0:
+                    logger.error(f"Error parsing sentences. Total errors so far: {error_count}")
+    sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
+    return sentences
+
+
+def remove_stopwords(text):
+    stop_words = set(stopwords.words('english'))
+    word_tokens = word_tokenize(text)
+    filtered_text = [word for word in word_tokens if word not in stop_words]
+    return ' '.join(filtered_text)
+
+
 def train_classifier(embedding_model_path: str, training_data_dir: str, weighted_average_word_embedding: bool = False,
                      standardize_embeddings: bool = False, normalize_embeddings: bool = False,
-                     sections_to_use: List[str] = None):
+                     sections_to_use: List[str] = None, num_processes: int = 4):
     embedding_model = load_embedding_model(model_path=embedding_model_path)
 
     X = []
     y = []
 
-    # Assume you have a function to get your training data
+    # Precompute word_to_index
+    if isinstance(embedding_model, KeyedVectors):
+        word_to_index = embedding_model.key_to_index
+    else:
+        word_to_index = {word: idx for idx, word in enumerate(embedding_model.get_words())}
+
     # For each document in your training data, extract embeddings and labels
     logger.info("Loading training set")
     for label in ["positive", "negative"]:
-        documents = list(get_documents(os.path.join(training_data_dir, label, "*")))
+        documents = list(get_documents(os.path.join(training_data_dir, label), num_processes=num_processes))
         total_docs = len(documents)
         start_time = time.time()
         last_reported = 0
@@ -127,7 +292,8 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
                 text_embedding = get_document_embedding(embedding_model, text,
                                                         weighted_average_word_embedding=weighted_average_word_embedding,
                                                         standardize_embeddings=standardize_embeddings,
-                                                        normalize_embeddings=normalize_embeddings)
+                                                        normalize_embeddings=normalize_embeddings,
+                                                        word_to_index=word_to_index)
                 X.append(text_embedding)
                 y.append(int(label == "positive"))
 
@@ -187,106 +353,6 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     return best_classifier, average_precision, average_recall, average_f1, best_classifier_name, best_params
 
 
-def save_classifier(classifier, file_path):
-    dump(classifier, file_path)
-    # TODO: upload model to ABC
-
-
-def load_classifier(file_path):
-    # TODO download classifier from ABC
-    return load(file_path)
-
-
-def get_sentences_from_tei_section(section):
-    sentences = []
-    error_count = 0  # Initialize error count
-    for paragraph in section.paragraphs:
-        if isinstance(paragraph, TextWithRefs):
-            paragraph = [paragraph]
-        for sentence in paragraph:
-            try:
-                if not sentence.text.isdigit() and not (
-                        len(section.paragraphs) == 3 and
-                        section.paragraphs[0][0].text in ['\n', ' '] and
-                        section.paragraphs[-1][0].text in ['\n', ' ']
-                ):
-                    sentences.append(re.sub('<[^<]+>', '', sentence.text))
-            except Exception as e:
-                error_count += 1
-                if error_count == 1 or error_count % 100 == 0:
-                    logger.error(f"Error parsing sentences. Total errors so far: {error_count}")
-    sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
-    return sentences
-
-
-def remove_stopwords(text):
-    stop_words = set(stopwords.words('english'))
-    word_tokens = word_tokenize(text)
-    filtered_text = [word for word in word_tokens if word not in stop_words]
-    return ' '.join(filtered_text)
-
-
-def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
-    documents = []
-    client = None
-    for file_path in glob.glob(os.path.join(input_docs_dir, "*")):
-        file_obj = Path(file_path)
-        if file_path.endswith(".tei") or file_path.endswith(".pdf"):
-            with file_obj.open("rb") as fin:
-                if file_path.endswith(".pdf"):
-                    if client is None:
-                        client = Client(base_url=os.environ.get("GROBID_API_URL"), timeout=1000, verify_ssl=False)
-                    logger.info("Started pdf to TEI conversion")
-                    form = ProcessForm(
-                        segment_sentences="1",
-                        input_=File(file_name=file_obj.name, payload=fin, mime_type="application/pdf"))
-                    r = process_fulltext_document.sync_detailed(client=client, multipart_data=form)
-                    file_stream = r.content
-                else:
-                    file_stream = fin
-                try:
-                    article: Article = TEI.parse(file_stream, figures=True)
-                except Exception as e:
-                    logger.error(f"Error parsing TEI file for {str(file_path)}: {str(e)}")
-                    continue
-                sentences = []
-                for section in article.sections:
-                    sentences.extend(get_sentences_from_tei_section(section))
-                abstract = ""
-                for section in article.sections:
-                    if section.name == "ABSTRACT":
-                        abstract = " ".join(get_sentences_from_tei_section(section))
-                        break
-                documents.append((file_path, " ".join(sentences), article.title, abstract))
-    return documents
-
-
-def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
-    embedding_model = load_embedding_model(model_path=embedding_model_path)
-    classifier_model = load_classifier(classifier_model_path)
-    X = []
-    files_loaded = []
-
-    documents = get_documents(input_docs_dir=input_docs_dir)
-    total_docs = len(documents)
-    start_time = time.time()
-    last_reported = 0
-
-    for idx, (file_path, fulltext, title, abstract) in enumerate(documents, start=1):
-        doc_embedding = get_document_embedding(embedding_model, fulltext)
-        X.append(doc_embedding)
-        files_loaded.append(file_path)
-
-        # Report progress
-        last_reported = report_progress(idx, total_docs, start_time, last_reported, args.progress_interval)
-
-    del embedding_model
-    X = np.array(X)
-    classifications = classifier_model.predict(X)
-    confidence_scores = [classes_proba[1] for classes_proba in classifier_model.predict_proba(X)]
-    return files_loaded, classifications, confidence_scores
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Classify documents or train document classifiers')
     parser.add_argument("-m", "--mode", type=str, choices=['train', 'classify'], default="classify",
@@ -310,6 +376,9 @@ if __name__ == '__main__':
                         default='INFO', help="Set the logging level")
     parser.add_argument("-p", "--progress_interval", type=float, default=0.0,
                         help="Set the progress reporting interval in percentage (e.g., 25 for 25%)")
+    parser.add_argument("-c", "--num_processes", type=int, default=4,
+                        help="Number of processes to use for multiprocessing. "
+                             "Default is 4. Use 0 to utilize all available CPU cores.")
 
     args = parser.parse_args()
 
@@ -364,14 +433,16 @@ if __name__ == '__main__':
             if len(os.listdir("/data/agr_document_classifier/to_classify")) == 0:
                 logger.info("Empty file dir. Downloading TEI files from ABC server")
                 download_tei_files_for_references(list(reference_curie_job_map.keys()),
-                                                  "/data/agr_document_classifier/to_classify", mod_abbr)
+                                                  "/data/agr_document_classifier/to_classify", mod_abbr,
+                                                  progress_interval=args.progress_interval)
             else:
                 logger.info("Using existing TEI files")
 
             files_loaded, classifications, conf_scores = classify_documents(
                 embedding_model_path=args.embedding_model_path,
                 classifier_model_path=f"/data/agr_document_classifier/{mod_abbr}_{datatype}.joblib",
-                input_docs_dir="/data/agr_document_classifier/to_classify")
+                input_docs_dir="/data/agr_document_classifier/to_classify",
+                num_processes=args.num_processes)
 
             total_files = len(files_loaded)
             start_time = time.time()
@@ -403,7 +474,8 @@ if __name__ == '__main__':
             training_data_dir="/data/agr_document_classifier/training",
             weighted_average_word_embedding=args.weighted_average_word_embedding,
             standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
-            sections_to_use=args.sections_to_use)
+            sections_to_use=args.sections_to_use,
+            num_processes=args.num_processes)
         save_classifier(classifier=classifier, file_path=f"/data/agr_document_classifier/{args.mod_train}_"
                                                          f"{args.datatype_train}.joblib")
         stats = {
