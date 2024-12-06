@@ -222,6 +222,35 @@ def get_file_from_abc_reffile_obj(referencefile_json_obj):
         return None
 
 
+def get_curie_from_xref(xref):
+    ref_by_xref_api = f'https://{blue_api_base_url}/reference/by_cross_reference/{xref}'
+    request = urllib.request.Request(url=ref_by_xref_api)
+    request.add_header("Content-type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        with urllib.request.urlopen(request) as response:
+            resp = response.read().decode("utf8")
+            resp_obj = json.loads(resp)
+            return resp_obj["curie"]
+    except HTTPError as e:
+        logger.error(e)
+
+
+def get_link_title_abstract_and_tpc(curie):
+    ref_data_api = f'https://{blue_api_base_url}/reference/{curie}'
+    request = urllib.request.Request(url=ref_data_api)
+    request.add_header("Content-type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        with urllib.request.urlopen(request) as response:
+            resp = response.read().decode("utf8")
+            resp_obj = json.loads(resp)
+            return (f'https://literature.alliancegenome.org/Biblio?action=display&referenceCurie={curie}',
+                    resp_obj["title"], resp_obj["abstract"])
+    except HTTPError as e:
+        logger.error(e)
+
+
 def download_tei_files_for_references(reference_curies: List[str], output_dir: str, mod_abbreviation, progress_interval=0.0):
     total_references = len(reference_curies)
     start_time = time.time()
