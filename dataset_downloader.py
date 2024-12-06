@@ -3,11 +3,8 @@ import csv
 import json
 import logging
 import os
-import requests
 import urllib.request
 from urllib.error import HTTPError
-
-from fastapi_okta.okta_utils import get_authentication_token, generate_headers
 
 from abc_utils import get_file_from_abc_reffile_obj, get_curie_from_xref
 
@@ -39,22 +36,22 @@ def download_and_categorize_pdfs(csv_file, output_dir):
     os.makedirs(os.path.join(output_dir, "negative"), exist_ok=True)
 
     with open(csv_file, 'r') as file:
-        csv_reader = csv.reader(file, delimiter='\t')
+        csv_reader = csv.DictReader(file, delimiter=',')  # Change delimiter to comma
         for row in csv_reader:
-            if len(row) < 3:
-                logger.warning(f"Skipping invalid row: {row}")
-                continue
+            # Assuming 'WBPaper' and 'Label' are the column names in expression.csv
+            agrkb_id = row.get('AGRKBID')
+            label = row.get('Positive/Negative')
 
-            wbpaper_id, label = row[1], row[2]
-            agr_curie = get_curie_from_xref(wbpaper_id)
-
-            if agr_curie:
-                category = "positive" if label.lower() == "positive" else "negative"
-                file_name = wbpaper_id.replace(":", "_")
-                category_dir = os.path.join(output_dir, category)
-                download_pdf_files(agr_curie, file_name, category_dir)
-            else:
-                logger.warning(f"Could not find AGR curie for {wbpaper_id}")
+            if not agrkb_id:
+                xref = row.get('XREF')
+                agrkb_id = get_curie_from_xref(xref)
+                if not agrkb_id or not label:
+                    logger.warning(f"Skipping invalid row: {row}")
+                    continue
+            category = "positive" if label == "1" else "negative"
+            file_name = agrkb_id.replace(":", "_")
+            category_dir = os.path.join(output_dir, category)
+            download_pdf_files(agrkb_id, file_name, category_dir)
 
 
 def main():
