@@ -52,18 +52,28 @@ def report_progress(current, total, start_time, last_reported, interval_percenta
 
 
 def get_document_embedding(model, document, weighted_average_word_embedding: bool = False,
-                           standardize_embeddings: bool = False, normalize_embeddings: bool = False):
-    # Split the document into words and extract the embedding for each word
+                           standardize_embeddings: bool = False, normalize_embeddings: bool = False,
+                           word_to_index=None):
+    # Split the document into words
     words = document.split()
     if isinstance(model, KeyedVectors):
-        embeddings = [model[word] for word in words if word in model]
-        word_to_index = model.key_to_index
+        vocab = set(model.key_to_index.keys())
+        valid_words = [word for word in words if word in vocab]
+        embeddings = model[valid_words]
+        if word_to_index is None:
+            word_to_index = model.key_to_index
     else:
-        embeddings = [model.get_word_vector(word) for word in words if word in model.words]
-        word_to_index = {model.words[i]: i for i in range(1, len(model.words))}
+        vocab = set(model.get_words())
+        valid_words = [word for word in words if word in vocab]
+        embeddings = np.array([model.get_word_vector(word) for word in valid_words])
+        if word_to_index is None:
+            word_to_index = {word: idx for idx, word in enumerate(model.get_words())}
+
+    if embeddings.size == 0:
+        return np.zeros(model.get_dimension())
 
     epsilon = 1e-10
-    embeddings_2d = np.array([vec if np.linalg.norm(vec) > 0 else np.full(vec.shape, epsilon) for vec in embeddings])
+    embeddings_2d = embeddings
 
     if standardize_embeddings:
         # Standardize the embeddings
@@ -76,7 +86,7 @@ def get_document_embedding(model, document, weighted_average_word_embedding: boo
         embeddings_2d /= norm
 
     if weighted_average_word_embedding:
-        weights = [word_to_index[word] / len(word_to_index) for word in words if word in word_to_index]
+        weights = np.array([word_to_index[word] / len(word_to_index) for word in valid_words])
         doc_embedding = np.average(embeddings_2d, axis=0, weights=weights)
     else:
         doc_embedding = np.mean(embeddings_2d, axis=0)
@@ -101,11 +111,16 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     X = []
     y = []
 
-    # Assume you have a function to get your training data
+    # Precompute word_to_index
+    if isinstance(embedding_model, KeyedVectors):
+        word_to_index = embedding_model.key_to_index
+    else:
+        word_to_index = {word: idx for idx, word in enumerate(embedding_model.get_words())}
+
     # For each document in your training data, extract embeddings and labels
     logger.info("Loading training set")
     for label in ["positive", "negative"]:
-        documents = list(get_documents(os.path.join(training_data_dir, label, "*")))
+        documents = list(get_documents(os.path.join(training_data_dir, label)))
         total_docs = len(documents)
         start_time = time.time()
         last_reported = 0
@@ -127,7 +142,8 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
                 text_embedding = get_document_embedding(embedding_model, text,
                                                         weighted_average_word_embedding=weighted_average_word_embedding,
                                                         standardize_embeddings=standardize_embeddings,
-                                                        normalize_embeddings=normalize_embeddings)
+                                                        normalize_embeddings=normalize_embeddings,
+                                                        word_to_index=word_to_index)
                 X.append(text_embedding)
                 y.append(int(label == "positive"))
 
@@ -183,8 +199,24 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     average_recall = best_results['mean_test_recall'][best_index]
     average_f1 = best_results['mean_test_f1'][best_index]
 
+    # Calculate standard deviations
+    std_precision = best_results['std_test_precision'][best_index]
+    std_recall = best_results['std_test_recall'][best_index]
+    std_f1 = best_results['std_test_f1'][best_index]
+
+    stats = {
+        "model_name": best_classifier_name,
+        "average_precision": round(float(average_precision), 3),
+        "average_recall": round(float(average_recall), 3),
+        "average_f1": round(float(average_f1), 3),
+        "std_precision": round(float(std_precision), 3),
+        "std_recall": round(float(std_recall), 3),
+        "std_f1": round(float(std_f1), 3),
+        "best_params": best_params
+    }
+
     # Return the trained model and performance metrics
-    return best_classifier, average_precision, average_recall, average_f1, best_classifier_name, best_params
+    return best_classifier, stats
 
 
 def save_classifier(classifier, file_path):
@@ -272,8 +304,13 @@ def classify_documents(embedding_model_path: str, classifier_model_path: str, in
     start_time = time.time()
     last_reported = 0
 
+    if isinstance(embedding_model, KeyedVectors):
+        word_to_index = embedding_model.key_to_index
+    else:
+        word_to_index = {word: idx for idx, word in enumerate(embedding_model.get_words())}
+
     for idx, (file_path, fulltext, title, abstract) in enumerate(documents, start=1):
-        doc_embedding = get_document_embedding(embedding_model, fulltext)
+        doc_embedding = get_document_embedding(embedding_model, fulltext, word_to_index=word_to_index)
         X.append(doc_embedding)
         files_loaded.append(file_path)
 
@@ -398,7 +435,7 @@ if __name__ == '__main__':
     else:
         # TODO: 1. download training docs for MOD and topic and store them in positive/negative dirs in fixed location
         #       2. save classifier and stats by uploading them to huggingface
-        classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
+        classifier, stats = train_classifier(
             embedding_model_path=args.embedding_model_path,
             training_data_dir="/data/agr_document_classifier/training",
             weighted_average_word_embedding=args.weighted_average_word_embedding,
@@ -406,13 +443,6 @@ if __name__ == '__main__':
             sections_to_use=args.sections_to_use)
         save_classifier(classifier=classifier, file_path=f"/data/agr_document_classifier/{args.mod_train}_"
                                                          f"{args.datatype_train}.joblib")
-        stats = {
-            "selected_model": classifier_name,
-            "precision": precision,
-            "recall": recall,
-            "f_score": fscore,
-            "fitted_parameters": classifier_params
-        }
         with open(f"/data/agr_document_classifier/{args.mod_train}_"
                   f"{args.datatype_train}_stats.json", "w") as stats_file:
             json.dump(stats, stats_file, indent=4)
