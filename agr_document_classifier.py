@@ -348,8 +348,24 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     average_recall = best_results['mean_test_recall'][best_index]
     average_f1 = best_results['mean_test_f1'][best_index]
 
+    # Calculate standard deviations
+    std_precision = best_results['std_test_precision'][best_index]
+    std_recall = best_results['std_test_recall'][best_index]
+    std_f1 = best_results['std_test_f1'][best_index]
+
+    stats = {
+        "model_name": best_classifier_name,
+        "average_precision": round(float(average_precision), 3),
+        "average_recall": round(float(average_recall), 3),
+        "average_f1": round(float(average_f1), 3),
+        "std_precision": round(float(std_precision), 3),
+        "std_recall": round(float(std_recall), 3),
+        "std_f1": round(float(std_f1), 3),
+        "best_params": best_params
+    }
+
     # Return the trained model and performance metrics
-    return best_classifier, average_precision, average_recall, average_f1, best_classifier_name, best_params
+    return best_classifier, stats
 
 
 if __name__ == '__main__':
@@ -477,7 +493,7 @@ if __name__ == '__main__':
     else:
         # TODO: 1. download training docs for MOD and topic and store them in positive/negative dirs in fixed location
         #       2. save classifier and stats by uploading them to huggingface
-        classifier, precision, recall, fscore, classifier_name, classifier_params = train_classifier(
+        classifier, stats = train_classifier(
             embedding_model_path=args.embedding_model_path,
             training_data_dir="/data/agr_document_classifier/training",
             weighted_average_word_embedding=args.weighted_average_word_embedding,
@@ -486,13 +502,6 @@ if __name__ == '__main__':
             num_processes=args.num_processes)
         save_classifier(classifier=classifier, file_path=f"/data/agr_document_classifier/{args.mod_train}_"
                                                          f"{args.datatype_train}.joblib")
-        stats = {
-            "selected_model": classifier_name,
-            "precision": precision,
-            "recall": recall,
-            "f_score": fscore,
-            "fitted_parameters": classifier_params
-        }
         with open(f"/data/agr_document_classifier/{args.mod_train}_"
                   f"{args.datatype_train}_stats.json", "w") as stats_file:
             json.dump(stats, stats_file, indent=4)
