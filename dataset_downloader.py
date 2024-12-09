@@ -61,9 +61,16 @@ def download_and_categorize_pdfs(csv_file, output_dir, start_agrkbid=None):
                     continue
 
             category = "positive" if label == "1" else "negative"
-            logger.info(f"Processing reference {agrkb_id} as {category}")
             file_name = agrkb_id.replace(":", "_")
             category_dir = os.path.join(output_dir, category)
+            tei_path = os.path.join(category_dir, f"{file_name}.tei")
+
+            # Check if TEI file already exists
+            if os.path.exists(tei_path):
+                logger.info(f"Skipping {agrkb_id} as TEI file already exists")
+                continue
+
+            logger.info(f"Processing reference {agrkb_id} as {category}")
             pdf_file_path = os.path.join(category_dir, f"{file_name}.pdf")
             download_main_pdf(agrkb_id, file_name, category_dir)
 
