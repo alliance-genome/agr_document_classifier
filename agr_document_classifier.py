@@ -102,58 +102,38 @@ def load_embedding_model(model_path):
     return model
 
 
-def process_single_document(args):
-    file_path, client_base_url = args
+def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
+    documents = []
     client = None
-    file_obj = Path(file_path)
-    if file_path.endswith(".tei") or file_path.endswith(".pdf"):
-        with file_obj.open("rb") as fin:
-            if file_path.endswith(".pdf"):
-                if client is None:
-                    client = Client(base_url=client_base_url, timeout=1000, verify_ssl=False)
-                form = ProcessForm(
-                    segment_sentences="1",
-                    input_=File(file_name=file_obj.name, payload=fin.read(), mime_type="application/pdf"))
-                r = process_fulltext_document.sync_detailed(client=client, multipart_data=form)
-                file_stream = r.content
-            else:
-                file_stream = fin.read()
-            try:
-                article: Article = TEI.parse(file_stream, figures=True)
-            except Exception as e:
-                logger.error(f"Error parsing TEI file for {str(file_path)}: {str(e)}")
-                return None
-            sentences = []
-            for section in article.sections:
-                sentences.extend(get_sentences_from_tei_section(section))
-            abstract = ""
-            for section in article.sections:
-                if section.name == "ABSTRACT":
-                    abstract = " ".join(get_sentences_from_tei_section(section))
-                    break
-            return (file_path, " ".join(sentences), article.title, abstract)
-    else:
-        return None
-
-
-def get_documents(input_docs_dir: str, num_processes: int) -> List[Tuple[str, str, str, str]]:
-    from multiprocessing import Pool, cpu_count
-
-    file_paths = glob.glob(os.path.join(input_docs_dir, "*"))
-    client_base_url = os.environ.get("GROBID_API_URL")
-
-    # Prepare arguments for each process
-    process_args = [(file_path, client_base_url) for file_path in file_paths]
-
-    if num_processes <= 0:
-        num_processes = cpu_count()
-
-    with Pool(processes=num_processes) as pool:
-        results = pool.map(process_single_document, process_args)
-
-    # Filter out None results
-    documents = [result for result in results if result is not None]
-
+    for file_path in glob.glob(input_docs_dir):
+        file_obj = Path(file_path)
+        if file_path.endswith(".tei") or file_path.endswith(".pdf"):
+            with file_obj.open("rb") as fin:
+                if file_path.endswith(".pdf"):
+                    if client is None:
+                        client = Client(base_url=os.environ.get("GROBID_API_URL"), timeout=1000, verify_ssl=False)
+                    logger.info("Started pdf to TEI conversion")
+                    form = ProcessForm(
+                        segment_sentences="1",
+                        input_=File(file_name=file_obj.name, payload=fin, mime_type="application/pdf"))
+                    r = process_fulltext_document.sync_detailed(client=client, multipart_data=form)
+                    file_stream = r.content
+                else:
+                    file_stream = fin
+                try:
+                    article: Article = TEI.parse(file_stream, figures=True)
+                except Exception as e:
+                    logger.error(f"Error parsing TEI file for {str(file_path)}: {str(e)}")
+                    continue
+                sentences = []
+                for section in article.sections:
+                    sentences.extend(get_sentences_from_tei_section(section))
+                abstract = ""
+                for section in article.sections:
+                    if section.name == "ABSTRACT":
+                        abstract = " ".join(get_sentences_from_tei_section(section))
+                        break
+                documents.append((file_path, " ".join(sentences), article.title, abstract))
     return documents
 
 
@@ -182,7 +162,7 @@ def classify_documents(embedding_model_path: str, classifier_model_path: str, in
     embedding_model = load_embedding_model(model_path=embedding_model_path)
     classifier_model = load_classifier(classifier_model_path)
 
-    documents = get_documents(input_docs_dir=input_docs_dir, num_processes=num_processes)
+    documents = get_documents(input_docs_dir=input_docs_dir)
     total_docs = len(documents)
     start_time = time.time()
     last_reported = 0
@@ -269,7 +249,7 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     # For each document in your training data, extract embeddings and labels
     logger.info("Loading training set")
     for label in ["positive", "negative"]:
-        documents = list(get_documents(os.path.join(training_data_dir, label), num_processes=num_processes))
+        documents = list(get_documents(os.path.join(training_data_dir, label)))
         total_docs = len(documents)
         start_time = time.time()
         last_reported = 0
