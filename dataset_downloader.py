@@ -6,19 +6,11 @@ import os
 import requests
 
 from lxml import etree
-from abc_utils import get_curie_from_xref, download_main_pdf
+from abc_utils import get_curie_from_xref, download_main_pdf, convert_pdf_with_grobid
 
 logger = logging.getLogger(__name__)
 
 blue_api_base_url = os.environ.get('API_SERVER', "literature-rest.alliancegenome.org")
-
-
-def convert_pdf_with_grobid(file_content):
-    grobid_api_url = os.environ.get("PDF2TEI_API_URL",
-                                    "https://grobid.alliancegenome.org/api/processFulltextDocument")
-    # Send the file content to the GROBID API
-    response = requests.post(grobid_api_url, files={'input': ("file", file_content)})
-    return response
 
 
 def check_conversion_failure(tei_content):
