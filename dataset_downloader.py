@@ -3,9 +3,8 @@ import csv
 import logging
 import os
 
-import requests
-
 from lxml import etree
+
 from abc_utils import get_curie_from_xref, download_main_pdf, convert_pdf_with_grobid
 
 logger = logging.getLogger(__name__)
