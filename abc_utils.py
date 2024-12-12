@@ -299,7 +299,7 @@ def download_tei_files_for_references(reference_curies: List[str], output_dir: s
 
 
 def convert_pdf_with_grobid(file_content):
-    grobid_api_url = os.environ.get("PDF2TEI_API_URL",
+    grobid_api_url = os.environ.get("GROBID_API_URL",
                                     "https://grobid.alliancegenome.org/api/processFulltextDocument")
     # Send the file content to the GROBID API
     response = requests.post(grobid_api_url, files={'input': ("file", file_content)})
