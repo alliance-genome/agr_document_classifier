@@ -68,13 +68,12 @@ def download_and_categorize_pdfs(csv_file, output_dir, mod_abbreviation, start_a
                 else:
                     agrkb_need_tei[agrkb_id] = "negative"
 
-    agrkb_need_tei_positive = list(map(lambda item: item[0], filter(lambda item: item[1] == "positive", agrkb_need_tei.items())))
+    agrkb_need_tei_positive = [key for key, value in agrkb_need_tei.items() if value == 'positive']
     if agrkb_need_tei_positive and len(agrkb_need_tei_positive) > 0:
         print(f"start to download positive tei file with size {len(agrkb_need_tei_positive)}")
         output_dir_positive = os.path.join(output_dir, "positive")
         download_tei_files_for_references(agrkb_need_tei_positive, output_dir_positive, mod_abbreviation, 0.0)
-    agrkb_need_tei_negative = list(
-        map(lambda item: item[0], filter(lambda item: item[1] == "negative", agrkb_need_tei.items())))
+    agrkb_need_tei_negative = [key for key, value in agrkb_need_tei.items() if value == 'negative']
     if agrkb_need_tei_positive and len(agrkb_need_tei_negative) > 0:
         print(f"start to download negative tei file with size {len(agrkb_need_tei_negative)}")
         output_dir_negative = os.path.join(output_dir, "negative")
