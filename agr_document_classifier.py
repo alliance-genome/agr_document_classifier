@@ -396,7 +396,7 @@ if __name__ == '__main__':
             if datatype != "catalytic_activity" or mod_abbr != "WB":
                 continue
             tet_source_id = get_tet_source_id(mod_abbreviation=mod_abbr)
-            reference_curie_job_map = {get_curie_from_reference_id(job["reference_id"]): job for job in jobs}
+            reference_curie_job_map = {job["reference_curie"]: job for job in jobs}
             os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
             if len(os.listdir("/data/agr_document_classifier/to_classify")) == 0:
                 logger.info("Empty file dir. Downloading TEI files from ABC server")
