@@ -70,16 +70,26 @@ def download_and_categorize_pdfs(csv_file, output_dir, mod_abbreviation, start_a
 
     agrkb_need_tei_positive = [key for key, value in agrkb_need_tei.items() if value == 'positive']
     if agrkb_need_tei_positive and len(agrkb_need_tei_positive) > 0:
-        print(f"start to download positive tei file with size {len(agrkb_need_tei_positive)}")
+        print(f"Positive tei files download started. Number of files to download: {len(agrkb_need_tei_positive)}")
         output_dir_positive = os.path.join(output_dir, "positive")
         download_tei_files_for_references(agrkb_need_tei_positive, output_dir_positive, mod_abbreviation, 0.0)
     agrkb_need_tei_negative = [key for key, value in agrkb_need_tei.items() if value == 'negative']
     if agrkb_need_tei_positive and len(agrkb_need_tei_negative) > 0:
-        print(f"start to download negative tei file with size {len(agrkb_need_tei_negative)}")
+        print(f"Negative tei files download started. Number of files to download: {len(agrkb_need_tei_negative)}")
         output_dir_negative = os.path.join(output_dir, "negative")
         download_tei_files_for_references(agrkb_need_tei_negative, output_dir_negative, mod_abbreviation, 0.0)
 
+    # Count the TEI files in the positive and negative directories
+    positive_tei_files = len(
+        [name for name in os.listdir(os.path.join(output_dir, "positive")) if name.endswith('.tei')])
+    negative_tei_files = len(
+        [name for name in os.listdir(os.path.join(output_dir, "negative")) if name.endswith('.tei')])
+
+    logger.info(f"Downloaded {positive_tei_files} positive TEI files.")
+    logger.info(f"Downloaded {negative_tei_files} negative TEI files.")
+
     # after batch download tei file, first check if tei file exist, if not, then download pdf and convert to tei file
+    logger.info("Starting PDF download and TEI conversion for files that were not available in TEI format in the ABC.")
     for (agrkb_id, category) in agrkb_need_tei.items():
         file_name = agrkb_id.replace(":", "_")
         category_dir = os.path.join(output_dir, category)
@@ -87,10 +97,9 @@ def download_and_categorize_pdfs(csv_file, output_dir, mod_abbreviation, start_a
 
         # Check if TEI file already exists
         if os.path.exists(tei_path):
-            logger.info(f"Skipping {agrkb_id} as TEI file already exists")
             continue
         else:
-            logger.info(f"Processing reference {agrkb_id} as {category}")
+            logger.info(f"Downloading PDF for reference {agrkb_id} as {category}")
             pdf_file_path = os.path.join(category_dir, f"{file_name}.pdf")
             download_main_pdf(agrkb_id, mod_abbreviation, file_name, category_dir)
             if not os.path.exists(pdf_file_path):
@@ -99,6 +108,7 @@ def download_and_categorize_pdfs(csv_file, output_dir, mod_abbreviation, start_a
 
             # Convert PDF to TEI
             pdf_content = open(pdf_file_path, "rb")
+            logger.info("Converting PDF to TEI")
             response = convert_pdf_with_grobid(pdf_content.read())
 
             if response.status_code == 200 and not check_conversion_failure(response.content):
