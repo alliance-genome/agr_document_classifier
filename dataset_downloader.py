@@ -5,7 +5,8 @@ import os
 
 from lxml import etree
 
-from abc_utils import get_curie_from_xref, download_main_pdf, convert_pdf_with_grobid
+from abc_utils import (get_curie_from_xref, download_main_pdf, convert_pdf_with_grobid,
+                       download_tei_files_for_references)
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +27,12 @@ def check_conversion_failure(tei_content):
         return True
 
 
-def download_and_categorize_pdfs(csv_file, output_dir, start_agrkbid=None):
+def download_and_categorize_pdfs(csv_file, output_dir, mod_abbreviation, start_agrkbid=None):
     os.makedirs(os.path.join(output_dir, "positive"), exist_ok=True)
     os.makedirs(os.path.join(output_dir, "negative"), exist_ok=True)
 
     start_processing = start_agrkbid is None
+    agrkb_need_tei = {}
 
     with open(csv_file, 'r') as file:
         csv_reader = csv.DictReader(file, delimiter=',')  # Change delimiter to comma
@@ -60,7 +62,34 @@ def download_and_categorize_pdfs(csv_file, output_dir, start_agrkbid=None):
             if os.path.exists(tei_path):
                 logger.info(f"Skipping {agrkb_id} as TEI file already exists")
                 continue
+            else:
+                if category == "positive":
+                    agrkb_need_tei[agrkb_id] = "positive"
+                else:
+                    agrkb_need_tei[agrkb_id] = "negative"
 
+    agrkb_need_tei_positive = [key for key, value in agrkb_need_tei.items() if value == 'positive']
+    if agrkb_need_tei_positive and len(agrkb_need_tei_positive) > 0:
+        print(f"start to download positive tei file with size {len(agrkb_need_tei_positive)}")
+        output_dir_positive = os.path.join(output_dir, "positive")
+        download_tei_files_for_references(agrkb_need_tei_positive, output_dir_positive, mod_abbreviation, 0.0)
+    agrkb_need_tei_negative = [key for key, value in agrkb_need_tei.items() if value == 'negative']
+    if agrkb_need_tei_positive and len(agrkb_need_tei_negative) > 0:
+        print(f"start to download negative tei file with size {len(agrkb_need_tei_negative)}")
+        output_dir_negative = os.path.join(output_dir, "negative")
+        download_tei_files_for_references(agrkb_need_tei_negative, output_dir_negative, mod_abbreviation, 0.0)
+
+    # after batch download tei file, first check if tei file exist, if not, then download pdf and convert to tei file
+    for (agrkb_id, category) in agrkb_need_tei.items():
+        file_name = agrkb_id.replace(":", "_")
+        category_dir = os.path.join(output_dir, category)
+        tei_path = os.path.join(category_dir, f"{file_name}.tei")
+
+        # Check if TEI file already exists
+        if os.path.exists(tei_path):
+            logger.info(f"Skipping {agrkb_id} as TEI file already exists")
+            continue
+        else:
             logger.info(f"Processing reference {agrkb_id} as {category}")
             pdf_file_path = os.path.join(category_dir, f"{file_name}.pdf")
             download_main_pdf(agrkb_id, file_name, category_dir)
@@ -84,6 +113,7 @@ def download_and_categorize_pdfs(csv_file, output_dir, start_agrkbid=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Download and categorize PDFs from a CSV file")
+    parser.add_argument("-m", "--mod-abbreviation", required=True, help="mod abbreviation, eg. FB, WB, SGD, ZFIN, MGI,RGD, XB")
     parser.add_argument("-f", "--csv-file", required=True, help="Path to the input CSV file")
     parser.add_argument("-o", "--output-dir", default="downloaded_files", help="Output directory for downloaded files")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR",
@@ -93,12 +123,14 @@ def main():
     args = parser.parse_args()
 
     # Set up logging
-    logging.basicConfig(level=args.log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logging.basicConfig(level=args.log_level,
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     out_dir = os.path.abspath(args.output_dir)
     os.makedirs(out_dir, exist_ok=True)
 
-    download_and_categorize_pdfs(args.csv_file, out_dir, args.start_agrkbid)
+    download_and_categorize_pdfs(args.csv_file, out_dir, args.mod_abbreviation,
+                                 args.start_agrkbid)
 
 
 if __name__ == '__main__':
