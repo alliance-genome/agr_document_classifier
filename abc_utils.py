@@ -260,6 +260,7 @@ def download_main_pdf(agr_curie, mod_abbreviation, file_name, output_dir):
         with urllib.request.urlopen(request) as response:
             resp = response.read().decode("utf8")
             resp_obj = json.loads(resp)
+            main_pdf_ref_file = None
             main_pdf_referencefiles = [ref_file for ref_file in resp_obj if
                                        ref_file["file_class"] == "main" and
                                        ref_file["file_publication_status"] == "final" and
@@ -270,7 +271,11 @@ def download_main_pdf(agr_curie, mod_abbreviation, file_name, output_dir):
                     main_pdf_ref_file = ref_file
                     break
             else:
-                main_pdf_ref_file = main_pdf_referencefiles[0] if main_pdf_referencefiles else None
+                for ref_file in main_pdf_referencefiles:
+                    if any(ref_file_mod["mod_abbreviation"] is None for ref_file_mod in
+                       ref_file["referencefile_mods"]):
+                        main_pdf_ref_file = ref_file
+                        break
             if main_pdf_ref_file:
                 file_content = get_file_from_abc_reffile_obj(main_pdf_ref_file)
                 with open(os.path.join(output_dir, file_name + ".pdf"), "wb") as out_file:
