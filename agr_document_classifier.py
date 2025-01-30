@@ -5,6 +5,7 @@ import logging
 import os
 import os.path
 import re
+import shutil
 import sys
 import time
 from collections import defaultdict
@@ -29,6 +30,7 @@ from sklearn.preprocessing import StandardScaler
 from abc_utils import get_jobs_to_classify, download_tei_files_for_references, get_curie_from_reference_id, \
     send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
     job_category_topic_map, set_job_success, get_tet_source_id, set_job_started, get_training_set_from_abc
+from dataset_downloader import download_tei_files_from_abc_or_convert_pdf
 from models import POSSIBLE_CLASSIFIERS
 
 nltk.download('stopwords')
@@ -452,6 +454,7 @@ if __name__ == '__main__':
                 last_reported = report_progress(idx, total_files, start_time, last_reported, args.progress_interval)
 
     else:
+        training_data_dir = "/data/agr_document_classifier/training"
         training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
         reference_ids_positive = []
         reference_ids_negative = []
@@ -460,9 +463,15 @@ if __name__ == '__main__':
                 reference_ids_positive.append(ds_entry["reference_curie"])
             else:
                 reference_ids_negative.append(ds_entry["reference_curie"])
+        if os.path.exists(training_data_dir):
+            shutil.rmtree(training_data_dir)
+        os.makedirs(training_data_dir, exist_ok=True)
+        download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative,
+                                                   output_dir=training_data_dir,
+                                                   mod_abbreviation=args.mod_train)
         classifier, stats = train_classifier(
             embedding_model_path=args.embedding_model_path,
-            training_data_dir="/data/agr_document_classifier/training",
+            training_data_dir=training_data_dir,
             weighted_average_word_embedding=args.weighted_average_word_embedding,
             standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
             sections_to_use=args.sections_to_use)
