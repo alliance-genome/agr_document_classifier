@@ -70,12 +70,12 @@ def download_and_categorize_pdfs(csv_file, output_dir, mod_abbreviation, start_a
 
     agrkb_need_tei_positive = [key for key, value in agrkb_need_tei.items() if value == 'positive']
     if agrkb_need_tei_positive and len(agrkb_need_tei_positive) > 0:
-        print(f"Positive tei files download started. Number of files to download: {len(agrkb_need_tei_positive)}")
+        logger.info(f"Positive tei files download started. Number of files to download: {len(agrkb_need_tei_positive)}")
         output_dir_positive = os.path.join(output_dir, "positive")
         download_tei_files_for_references(agrkb_need_tei_positive, output_dir_positive, mod_abbreviation, 0.0)
     agrkb_need_tei_negative = [key for key, value in agrkb_need_tei.items() if value == 'negative']
     if agrkb_need_tei_positive and len(agrkb_need_tei_negative) > 0:
-        print(f"Negative tei files download started. Number of files to download: {len(agrkb_need_tei_negative)}")
+        logger.info(f"Negative tei files download started. Number of files to download: {len(agrkb_need_tei_negative)}")
         output_dir_negative = os.path.join(output_dir, "negative")
         download_tei_files_for_references(agrkb_need_tei_negative, output_dir_negative, mod_abbreviation, 0.0)
 
