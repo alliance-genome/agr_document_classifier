@@ -324,6 +324,25 @@ def classify_documents(embedding_model_path: str, classifier_model_path: str, in
     return files_loaded, classifications, confidence_scores
 
 
+def save_stats_file(stats, file_path, task_type, mod_abbreviation, topic, version_num, file_extension,
+                    dataset_id):
+    model_data = {
+        "task_type": task_type,
+        "mod_abbreviation": mod_abbreviation,
+        "topic": topic,
+        "version_num": version_num,
+        "file_extension": file_extension,
+        "model_type": stats["model_name"],
+        "precision": stats["average_precision"],
+        "recall": stats["average_recall"],
+        "f1_score": stats["average_f1"],
+        "parameters": stats["best_params"],
+        "dataset_id": dataset_id
+    }
+    with open(file_path, "w") as stats_file:
+        json.dump(model_data, stats_file, indent=4)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Classify documents or train document classifiers')
     parser.add_argument("-m", "--mode", type=str, choices=['train', 'classify'], default="classify",
@@ -443,6 +462,13 @@ if __name__ == '__main__':
             sections_to_use=args.sections_to_use)
         save_classifier(classifier=classifier, file_path=f"/data/agr_document_classifier/{args.mod_train}_"
                                                          f"{args.datatype_train}.joblib")
-        with open(f"/data/agr_document_classifier/{args.mod_train}_"
-                  f"{args.datatype_train}_stats.json", "w") as stats_file:
-            json.dump(stats, stats_file, indent=4)
+        save_stats_file(
+            stats=stats,
+            file_path=f"/data/agr_document_classifier/{args.mod_train}_{args.datatype_train}_stats.json",
+            task_type="classification",
+            mod_abbreviation=args.mod_train,
+            topic=args.datatype_train,
+            version_num=None,
+            file_extension="joblib",
+            dataset_id="dataset_123"
+        )
