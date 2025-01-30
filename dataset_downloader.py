@@ -27,47 +27,7 @@ def check_conversion_failure(tei_content):
         return True
 
 
-def download_and_categorize_pdfs(csv_file, output_dir, mod_abbreviation, start_agrkbid=None):
-    os.makedirs(os.path.join(output_dir, "positive"), exist_ok=True)
-    os.makedirs(os.path.join(output_dir, "negative"), exist_ok=True)
-
-    start_processing = start_agrkbid is None
-    agrkb_need_tei = {}
-
-    with open(csv_file, 'r') as file:
-        csv_reader = csv.DictReader(file, delimiter=',')  # Change delimiter to comma
-        for row in csv_reader:
-            agrkb_id = row.get('AGRKBID')
-            label = row.get('Positive/Negative')
-
-            if not agrkb_id:
-                xref = row.get('XREF')
-                agrkb_id = get_curie_from_xref(xref)
-                if not agrkb_id or not label:
-                    logger.warning(f"Skipping invalid row: {row}")
-                    continue
-
-            if not start_processing:
-                if agrkb_id == start_agrkbid:
-                    start_processing = True
-                else:
-                    continue
-
-            category = "positive" if label == "1" else "negative"
-            file_name = agrkb_id.replace(":", "_")
-            category_dir = os.path.join(output_dir, category)
-            tei_path = os.path.join(category_dir, f"{file_name}.tei")
-
-            # Check if TEI file already exists
-            if os.path.exists(tei_path):
-                logger.info(f"Skipping {agrkb_id} as TEI file already exists")
-                continue
-            else:
-                if category == "positive":
-                    agrkb_need_tei[agrkb_id] = "positive"
-                else:
-                    agrkb_need_tei[agrkb_id] = "negative"
-
+def download_tei_files(agrkb_need_tei, output_dir, mod_abbreviation):
     agrkb_need_tei_positive = [key for key, value in agrkb_need_tei.items() if value == 'positive']
     if agrkb_need_tei_positive and len(agrkb_need_tei_positive) > 0:
         logger.info(f"Positive tei files download started. Number of files to download: {len(agrkb_need_tei_positive)}")
@@ -121,6 +81,50 @@ def download_and_categorize_pdfs(csv_file, output_dir, mod_abbreviation, start_a
             os.remove(pdf_file_path)
 
 
+def download_and_categorize_tei_files_from_csv(csv_file, output_dir, mod_abbreviation, start_agrkbid=None):
+    os.makedirs(os.path.join(output_dir, "positive"), exist_ok=True)
+    os.makedirs(os.path.join(output_dir, "negative"), exist_ok=True)
+
+    start_processing = start_agrkbid is None
+    agrkb_need_tei = {}
+
+    with open(csv_file, 'r') as file:
+        csv_reader = csv.DictReader(file, delimiter=',')  # Change delimiter to comma
+        for row in csv_reader:
+            agrkb_id = row.get('AGRKBID')
+            label = row.get('Positive/Negative')
+
+            if not agrkb_id:
+                xref = row.get('XREF')
+                agrkb_id = get_curie_from_xref(xref)
+                if not agrkb_id or not label:
+                    logger.warning(f"Skipping invalid row: {row}")
+                    continue
+
+            if not start_processing:
+                if agrkb_id == start_agrkbid:
+                    start_processing = True
+                else:
+                    continue
+
+            category = "positive" if label == "1" else "negative"
+            file_name = agrkb_id.replace(":", "_")
+            category_dir = os.path.join(output_dir, category)
+            tei_path = os.path.join(category_dir, f"{file_name}.tei")
+
+            # Check if TEI file already exists
+            if os.path.exists(tei_path):
+                logger.info(f"Skipping {agrkb_id} as TEI file already exists")
+                continue
+            else:
+                if category == "positive":
+                    agrkb_need_tei[agrkb_id] = "positive"
+                else:
+                    agrkb_need_tei[agrkb_id] = "negative"
+
+    download_tei_files(agrkb_need_tei, output_dir, mod_abbreviation)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Download and categorize PDFs from a CSV file")
     parser.add_argument("-m", "--mod-abbreviation", required=True, help="mod abbreviation, eg. FB, WB, SGD, ZFIN, MGI,RGD, XB")
@@ -139,8 +143,7 @@ def main():
     out_dir = os.path.abspath(args.output_dir)
     os.makedirs(out_dir, exist_ok=True)
 
-    download_and_categorize_pdfs(args.csv_file, out_dir, args.mod_abbreviation,
-                                 args.start_agrkbid)
+    download_and_categorize_tei_files_from_csv(args.csv_file, out_dir, args.mod_abbreviation, args.start_agrkbid)
 
 
 if __name__ == '__main__':

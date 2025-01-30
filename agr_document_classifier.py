@@ -452,8 +452,7 @@ if __name__ == '__main__':
                 last_reported = report_progress(idx, total_files, start_time, last_reported, args.progress_interval)
 
     else:
-        # TODO: 1. download training docs for MOD and topic and store them in positive/negative dirs in fixed location
-        #       2. save classifier and stats by uploading them to huggingface
+
         classifier, stats = train_classifier(
             embedding_model_path=args.embedding_model_path,
             training_data_dir="/data/agr_document_classifier/training",
