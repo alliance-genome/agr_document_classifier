@@ -27,30 +27,32 @@ def check_conversion_failure(tei_content):
         return True
 
 
-def download_tei_files(agrkb_need_tei, output_dir, mod_abbreviation):
-    agrkb_need_tei_positive = [key for key, value in agrkb_need_tei.items() if value == 'positive']
-    if agrkb_need_tei_positive and len(agrkb_need_tei_positive) > 0:
-        logger.info(f"Positive tei files download started. Number of files to download: {len(agrkb_need_tei_positive)}")
-        output_dir_positive = os.path.join(output_dir, "positive")
-        download_tei_files_for_references(agrkb_need_tei_positive, output_dir_positive, mod_abbreviation, 0.0)
-    agrkb_need_tei_negative = [key for key, value in agrkb_need_tei.items() if value == 'negative']
-    if agrkb_need_tei_positive and len(agrkb_need_tei_negative) > 0:
-        logger.info(f"Negative tei files download started. Number of files to download: {len(agrkb_need_tei_negative)}")
-        output_dir_negative = os.path.join(output_dir, "negative")
-        download_tei_files_for_references(agrkb_need_tei_negative, output_dir_negative, mod_abbreviation, 0.0)
+def download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative, output_dir,
+                                               mod_abbreviation):
+    logger.info(f"Positive tei files download started. Number of files to download: {len(reference_ids_positive)}")
+    output_dir_positive = os.path.join(output_dir, "positive")
+    download_tei_files_for_references(reference_ids_positive, output_dir_positive, mod_abbreviation, 0.0)
+    logger.info(f"Negative tei files download started. Number of files to download: {len(reference_ids_negative)}")
+    output_dir_negative = os.path.join(output_dir, "negative")
+    download_tei_files_for_references(reference_ids_negative, output_dir_negative, mod_abbreviation, 0.0)
 
     # Count the TEI files in the positive and negative directories
-    positive_tei_files = len(
-        [name for name in os.listdir(os.path.join(output_dir, "positive")) if name.endswith('.tei')])
-    negative_tei_files = len(
-        [name for name in os.listdir(os.path.join(output_dir, "negative")) if name.endswith('.tei')])
+    downloaded_reference_ids_positive = [name[:-4].replace("_", ":") for name in os.listdir(
+        output_dir_positive) if name.endswith('.tei')]
+    downloaded_reference_ids_negative = [name[:-4].replace("_", ":") for name in os.listdir(
+        output_dir_negative) if name.endswith('.tei')]
 
-    logger.info(f"Downloaded {positive_tei_files} positive TEI files.")
-    logger.info(f"Downloaded {negative_tei_files} negative TEI files.")
+    logger.info(f"Downloaded {len(downloaded_reference_ids_positive)} positive TEI files.")
+    logger.info(f"Downloaded {len(downloaded_reference_ids_negative)} negative TEI files.")
 
     # after batch download tei file, first check if tei file exist, if not, then download pdf and convert to tei file
     logger.info("Starting PDF download and TEI conversion for files that were not available in TEI format in the ABC.")
-    for (agrkb_id, category) in agrkb_need_tei.items():
+    remaining_reference_ids_positive = set(reference_ids_positive) - set(downloaded_reference_ids_positive)
+    remaining_reference_ids_negative = set(reference_ids_negative) - set(downloaded_reference_ids_negative)
+    agrkb_positive_negative = {reference_curie: "positive" for reference_curie in remaining_reference_ids_positive}
+    agrkb_positive_negative.update({reference_curie: "negative" for reference_curie in
+                                    remaining_reference_ids_negative})
+    for (agrkb_id, category) in agrkb_positive_negative.items():
         file_name = agrkb_id.replace(":", "_")
         category_dir = os.path.join(output_dir, category)
         tei_path = os.path.join(category_dir, f"{file_name}.tei")
@@ -86,7 +88,8 @@ def download_and_categorize_tei_files_from_csv(csv_file, output_dir, mod_abbrevi
     os.makedirs(os.path.join(output_dir, "negative"), exist_ok=True)
 
     start_processing = start_agrkbid is None
-    agrkb_need_tei = {}
+    reference_ids_positive = []
+    reference_ids_negative = []
 
     with open(csv_file, 'r') as file:
         csv_reader = csv.DictReader(file, delimiter=',')  # Change delimiter to comma
@@ -118,11 +121,12 @@ def download_and_categorize_tei_files_from_csv(csv_file, output_dir, mod_abbrevi
                 continue
             else:
                 if category == "positive":
-                    agrkb_need_tei[agrkb_id] = "positive"
+                    reference_ids_positive.append(agrkb_id)
                 else:
-                    agrkb_need_tei[agrkb_id] = "negative"
+                    reference_ids_negative.append(agrkb_id)
 
-    download_tei_files(agrkb_need_tei, output_dir, mod_abbreviation)
+    download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative, output_dir,
+                                               mod_abbreviation)
 
 
 def main():
