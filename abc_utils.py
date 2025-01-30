@@ -331,6 +331,53 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model_path: s
     pass
 
 
+# Function to create a dataset
+def create_dataset(title: str, description: str, mod_abbreviation: str, topic: str, dataset_type: str) -> (int, int):
+    create_dataset_url = f"https://{blue_api_base_url}/datasets/"
+    payload = {
+        "title": title,
+        "description": description,
+        "mod_abbreviation": mod_abbreviation,
+        "data_type": topic,
+        "dataset_type": dataset_type
+    }
+    response = requests.post(create_dataset_url, json=payload)
+    if response.status_code == 201:
+        dataset_id = response.json()["id"]
+        version = response.json()["version"]
+        logger.info(f"Dataset created with ID: {dataset_id}")
+        return dataset_id, version
+    else:
+        logger.error(f"Failed to create dataset: {response.text}")
+        response.raise_for_status()
+
+
+# Function to add an entry to the dataset
+def add_entry_to_dataset(mod_abbreviation: str, topic: str, task_type: str, version: int, reference_curie: str,
+                         positive: bool):
+    add_entry_url = f"https://{blue_api_base_url}/datasets/data_entry/"
+    payload = {
+        "mod_abbreviation": mod_abbreviation,
+        "data_type": topic,
+        "dataset_type": task_type,
+        "version": version,
+        "reference_curie": reference_curie,
+        "positive": positive
+    }
+    response = requests.post(add_entry_url, json=payload)
+    if response.status_code == 201:
+        logger.info("Entry added to dataset")
+    else:
+        logger.error(f"Failed to add entry to dataset: {response.text}")
+        response.raise_for_status()
+
+
 def get_training_set_from_abc(mod_abbreviation: str, topic: str):
-    # TODO: Implement this function if needed
-    pass
+    response = requests.get(f"https://{blue_api_base_url}/datasets/download/{mod_abbreviation}/{topic}/document/1")
+    if response.status_code == 200:
+        dataset = response.json()
+        logger.info(f"Dataset downloaded successfully.")
+        return dataset
+    else:
+        logger.error(f"Failed to download dataset {response.text}")
+        response.raise_for_status()
