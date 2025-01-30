@@ -251,7 +251,7 @@ def get_link_title_abstract_and_tpc(curie):
         logger.error(e)
 
 
-def download_main_pdf(agr_curie, file_name, output_dir):
+def download_main_pdf(agr_curie, mod_abbreviation, file_name, output_dir):
     all_reffiles_for_pap_api = f'https://{blue_api_base_url}/reference/referencefile/show_all/{agr_curie}'
     request = urllib.request.Request(url=all_reffiles_for_pap_api)
     request.add_header("Content-type", "application/json")
@@ -260,11 +260,21 @@ def download_main_pdf(agr_curie, file_name, output_dir):
         with urllib.request.urlopen(request) as response:
             resp = response.read().decode("utf8")
             resp_obj = json.loads(resp)
-            for ref_file in resp_obj:
-                if ref_file["file_extension"] == "pdf" and ref_file["file_class"] == "main":
-                    file_content = get_file_from_abc_reffile_obj(ref_file)
-                    with open(os.path.join(output_dir, file_name + ".pdf"), "wb") as out_file:
-                        out_file.write(file_content)
+            main_pdf_referencefiles = [ref_file for ref_file in resp_obj if
+                                       ref_file["file_class"] == "main" and
+                                       ref_file["file_publication_status"] == "final" and
+                                       ref_file["file_extension"] == "pdf"]
+            for ref_file in main_pdf_referencefiles:
+                if any(ref_file_mod["mod_abbreviation"] == mod_abbreviation for ref_file_mod in
+                       ref_file["referencefile_mods"]):
+                    main_pdf_ref_file = ref_file
+                    break
+            else:
+                main_pdf_ref_file = main_pdf_referencefiles[0] if main_pdf_referencefiles else None
+            if main_pdf_ref_file:
+                file_content = get_file_from_abc_reffile_obj(main_pdf_ref_file)
+                with open(os.path.join(output_dir, file_name + ".pdf"), "wb") as out_file:
+                    out_file.write(file_content)
     except HTTPError as e:
         logger.error(e)
 
