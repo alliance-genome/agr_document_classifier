@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Tuple, List
 
 import fasttext
+import joblib
 import nltk
 import numpy as np
 from gensim.models import KeyedVectors
@@ -20,7 +21,6 @@ from grobid_client import Client
 from grobid_client.api.pdf import process_fulltext_document
 from grobid_client.models import Article, ProcessForm, TextWithRefs
 from grobid_client.types import TEI, File
-from joblib import dump, load
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score
@@ -29,7 +29,8 @@ from sklearn.preprocessing import StandardScaler
 
 from abc_utils import get_jobs_to_classify, download_tei_files_for_references, get_curie_from_reference_id, \
     send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
-    job_category_topic_map, set_job_success, get_tet_source_id, set_job_started, get_training_set_from_abc
+    job_category_topic_map, set_job_success, get_tet_source_id, set_job_started, get_training_set_from_abc, \
+    upload_classification_model, download_classification_model
 from dataset_downloader import download_tei_files_from_abc_or_convert_pdf
 from models import POSSIBLE_CLASSIFIERS
 
@@ -221,25 +222,13 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     return best_classifier, stats
 
 
-def save_classifier(classifier, mod_abbreviation: str, topic: str, stats: dict):
-    file_path = f"/data/agr_document_classifier/{mod_abbreviation}_{topic}.joblib"
-    dump(classifier, file_path)
-    save_stats_file(
-        stats=stats,
-        file_path=f"/data/agr_document_classifier/{args.mod_train}_{args.datatype_train}_stats.json",
-        task_type="classification",
-        mod_abbreviation=args.mod_train,
-        topic=args.datatype_train,
-        version_num=None,
-        file_extension="joblib",
-        dataset_id="dataset_123"
-    )
-    # TODO: upload model to ABC
+def save_classifier(classifier, mod_abbreviation: str, topic: str, stats: dict, dataset_id: int):
+    upload_classification_model(mod_abbreviation, topic, classifier, stats, dataset_id=dataset_id,
+                                file_extension="joblib")
 
 
-def load_classifier(file_path):
-    # TODO download classifier from ABC
-    return load(file_path)
+def load_classifier(mod_abbreviation, topic, file_path):
+    download_classification_model(mod_abbreviation=mod_abbreviation, topic=topic, output_path=file_path)
 
 
 def get_sentences_from_tei_section(section):
@@ -306,9 +295,10 @@ def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
     return documents
 
 
-def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
+def classify_documents(mod_abbreviation, topic, embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
     embedding_model = load_embedding_model(model_path=embedding_model_path)
-    classifier_model = load_classifier(classifier_model_path)
+    load_classifier(mod_abbreviation, topic, classifier_model_path)
+    classifier_model = joblib.load(classifier_model_path)
     X = []
     files_loaded = []
 
@@ -408,6 +398,7 @@ if __name__ == '__main__':
             for i, job in enumerate(all_jobs, start=1):
                 reference_id = job["reference_id"]
                 datatype = job["job_name"].replace("_classification_job", "")
+                # TODO get topic from data type
                 mod_id = job["mod_id"]
                 if (mod_id, datatype, reference_id) not in jobs_already_added:
                     mod_datatype_jobs[(mod_id, datatype)].append(job)
@@ -422,7 +413,6 @@ if __name__ == '__main__':
         logger.info("Finished loading jobs to classify from ABC ...")
 
         for (mod_id, datatype), jobs in mod_datatype_jobs.items():
-            # TODO: download model from the ABC
             mod_abbr = get_cached_mod_abbreviation_from_id(mod_id)
             datatype = datatype.replace(" ", "_")
             if datatype != "catalytic_activity" or mod_abbr != "WB":
@@ -438,6 +428,7 @@ if __name__ == '__main__':
                 logger.info("Using existing TEI files")
 
             files_loaded, classifications, conf_scores = classify_documents(
+                mod_abbreviation=args.mod_train, topic=topic,
                 embedding_model_path=args.embedding_model_path,
                 classifier_model_path=f"/data/agr_document_classifier/{mod_abbr}_{datatype}.joblib",
                 input_docs_dir="/data/agr_document_classifier/to_classify")

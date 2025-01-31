@@ -321,14 +321,58 @@ def convert_pdf_with_grobid(file_content):
     return response
 
 
-def download_classification_model(mod_abbreviation: str, topic: str):
-    # TODO: Implement this function if needed
-    pass
+def download_classification_model(mod_abbreviation: str, topic: str, output_path: str):
+    download_url = f"https://{blue_api_base_url}/ml_model/download/biocuration_topic_classification/{mod_abbreviation}/{topic}"
+    token = get_authentication_token()
+    headers = generate_headers(token)
+
+    # Make the request to download the model
+    response = requests.get(download_url, headers=headers)
+
+    if response.status_code == 200:
+        with open(output_path, "wb") as model_file:
+            model_file.write(response.content)
+        logger.info("Model downloaded successfully.")
+    else:
+        logger.error(f"Failed to download model: {response.text}")
+        response.raise_for_status()
 
 
-def upload_classification_model(mod_abbreviation: str, topic: str, model_path: str):
-    # TODO: Implement this function if needed
-    pass
+def upload_classification_model(mod_abbreviation: str, topic: str, model, stats: dict, dataset_id: int,
+                                file_extension: str):
+    upload_url = f"https://{blue_api_base_url}/ml_model/upload"
+    token = get_authentication_token()
+    headers = generate_headers(token)
+
+    # Prepare the metadata payload
+    metadata = {
+        "task_type": "biocuration_topic_classification",
+        "mod_abbreviation": mod_abbreviation,
+        "topic": topic,
+        "version_num": None,
+        "file_extension": file_extension,
+        "model_type": stats["model_name"],
+        "precision": stats["average_precision"],
+        "recall": stats["average_recall"],
+        "f1_score": stats["average_f1"],
+        "parameters": stats["best_params"],
+        "dataset_id": dataset_id
+    }
+
+    # Prepare the files payload
+    files = {
+        "file": model,
+        "metadata": (None, json.dumps(metadata), "application/json")
+    }
+
+    # Make the request to upload the model
+    response = requests.post(upload_url, headers=headers, files=files)
+
+    if response.status_code == 201:
+        logger.info("Model uploaded successfully.")
+    else:
+        logger.error(f"Failed to upload model: {response.text}")
+        response.raise_for_status()
 
 
 # Function to create a dataset
