@@ -373,7 +373,7 @@ def add_entry_to_dataset(mod_abbreviation: str, topic: str, task_type: str, vers
 
 
 def get_training_set_from_abc(mod_abbreviation: str, topic: str):
-    response = requests.get(f"https://{blue_api_base_url}/datasets/download/{mod_abbreviation}/{topic}/document/1")
+    response = requests.get(f"https://{blue_api_base_url}/datasets/download/{mod_abbreviation}/{topic}/document/")
     if response.status_code == 200:
         dataset = response.json()
         logger.info(f"Dataset downloaded successfully.")
