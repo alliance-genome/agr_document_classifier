@@ -221,8 +221,19 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     return best_classifier, stats
 
 
-def save_classifier(classifier, file_path):
+def save_classifier(classifier, mod_abbreviation: str, topic: str, stats: dict):
+    file_path = f"/data/agr_document_classifier/{mod_abbreviation}_{topic}.joblib"
     dump(classifier, file_path)
+    save_stats_file(
+        stats=stats,
+        file_path=f"/data/agr_document_classifier/{args.mod_train}_{args.datatype_train}_stats.json",
+        task_type="classification",
+        mod_abbreviation=args.mod_train,
+        topic=args.datatype_train,
+        version_num=None,
+        file_extension="joblib",
+        dataset_id="dataset_123"
+    )
     # TODO: upload model to ABC
 
 
@@ -475,15 +486,4 @@ if __name__ == '__main__':
             weighted_average_word_embedding=args.weighted_average_word_embedding,
             standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
             sections_to_use=args.sections_to_use)
-        save_classifier(classifier=classifier, file_path=f"/data/agr_document_classifier/{args.mod_train}_"
-                                                         f"{args.datatype_train}.joblib")
-        save_stats_file(
-            stats=stats,
-            file_path=f"/data/agr_document_classifier/{args.mod_train}_{args.datatype_train}_stats.json",
-            task_type="classification",
-            mod_abbreviation=args.mod_train,
-            topic=args.datatype_train,
-            version_num=None,
-            file_extension="joblib",
-            dataset_id="dataset_123"
-        )
+        save_classifier(classifier=classifier, mod_abbreviation=args.mod_train, topic=args.datatype_train, stats=stats)
