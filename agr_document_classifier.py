@@ -398,7 +398,6 @@ if __name__ == '__main__':
             for i, job in enumerate(all_jobs, start=1):
                 reference_id = job["reference_id"]
                 datatype = job["job_name"].replace("_classification_job", "")
-                # TODO get topic from data type
                 mod_id = job["mod_id"]
                 if (mod_id, datatype, reference_id) not in jobs_already_added:
                     mod_datatype_jobs[(mod_id, datatype)].append(job)
@@ -427,6 +426,7 @@ if __name__ == '__main__':
             else:
                 logger.info("Using existing TEI files")
 
+            topic = job_category_topic_map[datatype]
             files_loaded, classifications, conf_scores = classify_documents(
                 mod_abbreviation=args.mod_train, topic=topic,
                 embedding_model_path=args.embedding_model_path,

@@ -378,6 +378,8 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model, stats:
 # Function to create a dataset
 def create_dataset(title: str, description: str, mod_abbreviation: str, topic: str, dataset_type: str) -> (int, int):
     create_dataset_url = f"https://{blue_api_base_url}/datasets/"
+    token = get_authentication_token()
+    headers = generate_headers(token)
     payload = {
         "title": title,
         "description": description,
@@ -385,9 +387,9 @@ def create_dataset(title: str, description: str, mod_abbreviation: str, topic: s
         "data_type": topic,
         "dataset_type": dataset_type
     }
-    response = requests.post(create_dataset_url, json=payload)
+    response = requests.post(create_dataset_url, json=payload, headers=headers)
     if response.status_code == 201:
-        dataset_id = response.json()["id"]
+        dataset_id = response.json()["dataset_id"]
         version = response.json()["version"]
         logger.info(f"Dataset created with ID: {dataset_id}")
         return dataset_id, version
@@ -397,18 +399,20 @@ def create_dataset(title: str, description: str, mod_abbreviation: str, topic: s
 
 
 # Function to add an entry to the dataset
-def add_entry_to_dataset(mod_abbreviation: str, topic: str, task_type: str, version: int, reference_curie: str,
+def add_entry_to_dataset(mod_abbreviation: str, topic: str, dataset_type: str, version: int, reference_curie: str,
                          positive: bool):
     add_entry_url = f"https://{blue_api_base_url}/datasets/data_entry/"
+    token = get_authentication_token()
+    headers = generate_headers(token)
     payload = {
         "mod_abbreviation": mod_abbreviation,
         "data_type": topic,
-        "dataset_type": task_type,
+        "dataset_type": dataset_type,
         "version": version,
         "reference_curie": reference_curie,
         "positive": positive
     }
-    response = requests.post(add_entry_url, json=payload)
+    response = requests.post(add_entry_url, json=payload, headers=headers)
     if response.status_code == 201:
         logger.info("Entry added to dataset")
     else:

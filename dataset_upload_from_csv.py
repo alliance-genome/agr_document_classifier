@@ -23,7 +23,7 @@ def upload_dataset_from_csv(csv_file: str, title: str, description: str, mod_abb
                 if not agrkb_id or not positive:
                     logger.warning(f"Skipping invalid row: {row}")
                     continue
-            add_entry_to_dataset(mod_abbreviation=mod_abbreviation, topic=topic, task_type="document_classification",
+            add_entry_to_dataset(mod_abbreviation=mod_abbreviation, topic=topic, dataset_type="document",
                                  version=version, reference_curie=agrkb_id, positive=positive)
 
 
@@ -31,11 +31,11 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Upload dataset to ABC from CSV file")
-    parser.add_argument("csv_file", help="Path to the CSV file")
-    parser.add_argument("title", help="Name of the dataset")
-    parser.add_argument("description", help="Description of the dataset")
-    parser.add_argument("mod_abbreviation", help="Mod abbreviation")
-    parser.add_argument("topic", help="Topic of the dataset")
+    parser.add_argument("-f", "--csv-file", help="Path to the CSV file")
+    parser.add_argument("-t", "--title", help="Name of the dataset")
+    parser.add_argument("-d", "--description", help="Description of the dataset")
+    parser.add_argument("-m", "--mod-abbreviation", help="Mod abbreviation")
+    parser.add_argument("-T", "--topic", help="Topic of the dataset")
     args = parser.parse_args()
 
     upload_dataset_from_csv(args.csv_file, args.title, args.description, args.mod_abbreviation, args.topic)
