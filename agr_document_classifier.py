@@ -458,16 +458,13 @@ if __name__ == '__main__':
     else:
         training_data_dir = "/data/agr_document_classifier/training"
         training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
-        reference_ids_positive = []
-        reference_ids_negative = []
-        for ds_entry in training_set["data_training"]:
-            if ds_entry["positive"]:
-                reference_ids_positive.append(ds_entry["reference_curie"])
-            else:
-                reference_ids_negative.append(ds_entry["reference_curie"])
+        reference_ids_positive = [agrkbid for agrkbid, positive in training_set["data_training"].items() if positive]
+        reference_ids_negative = [agrkbid for agrkbid, positive in training_set["data_training"].items() if not positive]
         if os.path.exists(training_data_dir):
             shutil.rmtree(training_data_dir)
         os.makedirs(training_data_dir, exist_ok=True)
+        os.makedirs(os.path.join(training_data_dir, "positive"), exist_ok=True)
+        os.makedirs(os.path.join(training_data_dir, "negative"), exist_ok=True)
         download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative,
                                                    output_dir=training_data_dir,
                                                    mod_abbreviation=args.mod_train)
