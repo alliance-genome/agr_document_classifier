@@ -421,7 +421,8 @@ def add_entry_to_dataset(mod_abbreviation: str, topic: str, dataset_type: str, v
 
 
 def get_training_set_from_abc(mod_abbreviation: str, topic: str):
-    response = requests.get(f"https://{blue_api_base_url}/datasets/download/{mod_abbreviation}/{topic}/document/")
+    # TODO: use latest dataset version when new endpoint is available
+    response = requests.get(f"https://{blue_api_base_url}/datasets/download/{mod_abbreviation}/{topic}/document/1/")
     if response.status_code == 200:
         dataset = response.json()
         logger.info(f"Dataset downloaded successfully.")

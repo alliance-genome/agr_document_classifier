@@ -16,7 +16,7 @@ def upload_dataset_from_csv(csv_file: str, title: str, description: str, mod_abb
         csv_reader = csv.DictReader(file, delimiter=',')  # Change delimiter to comma
         for row in csv_reader:
             agrkb_id = row.get('AGRKBID')
-            positive = bool(row.get('Positive/Negative'))
+            positive = bool(int(row.get('Positive/Negative')))
             if not agrkb_id:
                 xref = row.get('XREF')
                 agrkb_id = get_curie_from_xref(xref)
