@@ -428,9 +428,6 @@ if __name__ == '__main__':
                     pass
                 os.remove(file_path)
 
-                # Report progress
-                last_reported = report_progress(idx, total_files, start_time, last_reported, args.progress_interval)
-
     else:
         training_data_dir = "/data/agr_document_classifier/training"
         training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
