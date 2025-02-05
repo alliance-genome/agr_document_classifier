@@ -345,8 +345,6 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--log_level", type=str,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help="Set the logging level")
-    parser.add_argument("-p", "--progress_interval", type=float, default=0.0,
-                        help="Set the progress reporting interval in percentage (e.g., 25 for 25%)")
 
     args = parser.parse_args()
 
@@ -381,7 +379,6 @@ if __name__ == '__main__':
                     mod_datatype_jobs[(mod_id, datatype)].append(job)
                     jobs_already_added.add((mod_id, datatype, reference_id))
 
-                # Report progress
                 current = offset + i
             offset += limit
 
