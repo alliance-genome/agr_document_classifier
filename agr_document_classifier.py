@@ -430,9 +430,8 @@ if __name__ == '__main__':
         training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
         reference_ids_positive = [agrkbid for agrkbid, positive in training_set["data_training"].items() if positive]
         reference_ids_negative = [agrkbid for agrkbid, positive in training_set["data_training"].items() if not positive]
-        if os.path.exists(training_data_dir):
-            shutil.rmtree(training_data_dir)
-        os.makedirs(training_data_dir, exist_ok=True)
+        shutil.rmtree(os.path.join(training_data_dir, "positive"), ignore_errors=True)
+        shutil.rmtree(os.path.join(training_data_dir, "negative"), ignore_errors=True)
         os.makedirs(os.path.join(training_data_dir, "positive"), exist_ok=True)
         os.makedirs(os.path.join(training_data_dir, "negative"), exist_ok=True)
         download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative,
