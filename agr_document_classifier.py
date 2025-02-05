@@ -228,8 +228,7 @@ def get_sentences_from_tei_section(section):
                     sentences.append(re.sub('<[^<]+>', '', sentence.text))
             except Exception as e:
                 error_count += 1
-                if error_count == 1 or error_count % 100 == 0:
-                    logger.error(f"Error parsing sentences. Total errors so far: {error_count}")
+                logger.error(f"Error parsing sentences. Total errors so far for reference: {error_count}")
     sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
     return sentences
 
