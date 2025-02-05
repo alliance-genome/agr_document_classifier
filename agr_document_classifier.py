@@ -204,7 +204,9 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
 
 
 def save_classifier(classifier, mod_abbreviation: str, topic: str, stats: dict, dataset_id: int):
-    upload_classification_model(mod_abbreviation, topic, classifier, stats, dataset_id=dataset_id,
+    model_path = f"/tmp/{mod_abbreviation}_{topic}_classifier.joblib"
+    joblib.dump(classifier, model_path)
+    upload_classification_model(mod_abbreviation, topic, model_path, stats, dataset_id=dataset_id,
                                 file_extension="joblib")
 
 

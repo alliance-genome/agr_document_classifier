@@ -338,7 +338,7 @@ def download_classification_model(mod_abbreviation: str, topic: str, output_path
         response.raise_for_status()
 
 
-def upload_classification_model(mod_abbreviation: str, topic: str, model, stats: dict, dataset_id: int,
+def upload_classification_model(mod_abbreviation: str, topic: str, model_path, stats: dict, dataset_id: int,
                                 file_extension: str):
     upload_url = f"https://{blue_api_base_url}/ml_model/upload"
     token = get_authentication_token()
@@ -361,7 +361,7 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model, stats:
 
     # Prepare the files payload
     files = {
-        "file": model,
+        "file": open(model_path, "rb"),
         "metadata": (None, json.dumps(metadata), "application/json")
     }
 
