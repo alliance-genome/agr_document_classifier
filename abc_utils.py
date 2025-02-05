@@ -370,6 +370,8 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model_path, s
 
     if response.status_code == 201:
         logger.info("Model uploaded successfully.")
+        logger.info(f"A temporary copy of the model has been saved at: {model_path}.")
+        logger.info(f"The following metadata was uploaded: {metadata}")
     else:
         logger.error(f"Failed to upload model: {response.text}")
         response.raise_for_status()
