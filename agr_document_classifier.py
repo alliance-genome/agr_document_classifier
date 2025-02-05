@@ -283,9 +283,6 @@ def classify_documents(mod_abbreviation, topic, embedding_model_path: str, class
     files_loaded = []
 
     documents = get_documents(input_docs_dir=input_docs_dir)
-    total_docs = len(documents)
-    start_time = time.time()
-    last_reported = 0
 
     if isinstance(embedding_model, KeyedVectors):
         word_to_index = embedding_model.key_to_index
