@@ -41,19 +41,6 @@ nltk.download('punkt')
 logger = logging.getLogger(__name__)
 
 
-def report_progress(current, total, start_time, last_reported, interval_percentage):
-    if interval_percentage <= 0:
-        return last_reported  # No progress reporting if interval is 0 or negative
-
-    percent_complete = (current / total) * 100
-    if percent_complete - last_reported >= interval_percentage or current == total:
-        elapsed_time = time.time() - start_time
-        logger.info(f"Progress: {percent_complete:.2f}% complete ({current}/{total}), "
-                    f"Elapsed time: {elapsed_time:.2f}s")
-        last_reported = percent_complete
-    return last_reported
-
-
 def get_document_embedding(model, document, weighted_average_word_embedding: bool = False,
                            standardize_embeddings: bool = False, normalize_embeddings: bool = False,
                            word_to_index=None):
@@ -124,9 +111,6 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     logger.info("Loading training set")
     for label in ["positive", "negative"]:
         documents = list(get_documents(os.path.join(training_data_dir, label, "*")))
-        total_docs = len(documents)
-        start_time = time.time()
-        last_reported = 0
 
         for idx, (_, fulltext, title, abstract) in enumerate(documents, start=1):
             text = ""
@@ -149,9 +133,6 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
                                                         word_to_index=word_to_index)
                 X.append(text_embedding)
                 y.append(int(label == "positive"))
-
-            # Report progress
-            last_reported = report_progress(idx, total_docs, start_time, last_reported, args.progress_interval)
 
     del embedding_model
     logger.info("Finished loading training set.")
@@ -317,9 +298,6 @@ def classify_documents(mod_abbreviation, topic, embedding_model_path: str, class
         X.append(doc_embedding)
         files_loaded.append(file_path)
 
-        # Report progress
-        last_reported = report_progress(idx, total_docs, start_time, last_reported, args.progress_interval)
-
     del embedding_model
     X = np.array(X)
     classifications = classifier_model.predict(X)
@@ -405,8 +383,6 @@ if __name__ == '__main__':
 
                 # Report progress
                 current = offset + i
-                last_reported = report_progress(current, total_jobs_estimate, start_time, last_reported,
-                                                args.progress_interval)
             offset += limit
 
         logger.info("Finished loading jobs to classify from ABC ...")
