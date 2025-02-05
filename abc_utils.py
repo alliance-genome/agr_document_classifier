@@ -420,12 +420,13 @@ def add_entry_to_dataset(mod_abbreviation: str, topic: str, dataset_type: str, v
         response.raise_for_status()
 
 
-def get_training_set_from_abc(mod_abbreviation: str, topic: str):
-    # TODO: use latest dataset version when new endpoint is available
-    response = requests.get(f"https://{blue_api_base_url}/datasets/download/{mod_abbreviation}/{topic}/document/1/")
+def get_training_set_from_abc(mod_abbreviation: str, topic: str, metadata_only: bool = False):
+    endpoint = "metadata" if metadata_only else "download"
+    # TODO download latest version
+    response = requests.get(f"https://{blue_api_base_url}/datasets/{endpoint}/{mod_abbreviation}/{topic}/document/1/")
     if response.status_code == 200:
         dataset = response.json()
-        logger.info(f"Dataset downloaded successfully.")
+        logger.info(f"Dataset {endpoint} downloaded successfully.")
         return dataset
     else:
         logger.error(f"Failed to download dataset {response.text}")

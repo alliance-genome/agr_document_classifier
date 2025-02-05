@@ -429,6 +429,8 @@ if __name__ == '__main__':
         training_data_dir = "/data/agr_document_classifier/training"
         if args.skip_training_set_download:
             logger.info("Skipping training set download")
+            training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train,
+                                                     metadata_only=True)
         else:
             training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
             reference_ids_positive = [agrkbid for agrkbid, positive in training_set["data_training"].items() if positive]
