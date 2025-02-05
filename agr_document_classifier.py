@@ -338,6 +338,10 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--standardize_embeddings", action="store_true",
                         help="Whether to standardize the word embedding vectors",
                         required=False)
+    parser.add_argument("-S", "--skip_training_set_download", action="store_true",
+                        help="Assume that tei files from training set are already present and do not download them "
+                             "again",
+                        required=False)
     parser.add_argument("-l", "--log_level", type=str,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help="Set the logging level")
@@ -423,16 +427,19 @@ if __name__ == '__main__':
 
     else:
         training_data_dir = "/data/agr_document_classifier/training"
-        training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
-        reference_ids_positive = [agrkbid for agrkbid, positive in training_set["data_training"].items() if positive]
-        reference_ids_negative = [agrkbid for agrkbid, positive in training_set["data_training"].items() if not positive]
-        shutil.rmtree(os.path.join(training_data_dir, "positive"), ignore_errors=True)
-        shutil.rmtree(os.path.join(training_data_dir, "negative"), ignore_errors=True)
-        os.makedirs(os.path.join(training_data_dir, "positive"), exist_ok=True)
-        os.makedirs(os.path.join(training_data_dir, "negative"), exist_ok=True)
-        download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative,
-                                                   output_dir=training_data_dir,
-                                                   mod_abbreviation=args.mod_train)
+        if args.skip_training_set_download:
+            logger.info("Skipping training set download")
+        else:
+            training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
+            reference_ids_positive = [agrkbid for agrkbid, positive in training_set["data_training"].items() if positive]
+            reference_ids_negative = [agrkbid for agrkbid, positive in training_set["data_training"].items() if not positive]
+            shutil.rmtree(os.path.join(training_data_dir, "positive"), ignore_errors=True)
+            shutil.rmtree(os.path.join(training_data_dir, "negative"), ignore_errors=True)
+            os.makedirs(os.path.join(training_data_dir, "positive"), exist_ok=True)
+            os.makedirs(os.path.join(training_data_dir, "negative"), exist_ok=True)
+            download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative,
+                                                       output_dir=training_data_dir,
+                                                       mod_abbreviation=args.mod_train)
         classifier, stats = train_classifier(
             embedding_model_path=args.embedding_model_path,
             training_data_dir=training_data_dir,
