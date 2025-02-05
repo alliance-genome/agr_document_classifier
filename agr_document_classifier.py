@@ -439,4 +439,5 @@ if __name__ == '__main__':
             weighted_average_word_embedding=args.weighted_average_word_embedding,
             standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
             sections_to_use=args.sections_to_use)
-        save_classifier(classifier=classifier, mod_abbreviation=args.mod_train, topic=args.datatype_train, stats=stats)
+        save_classifier(classifier=classifier, mod_abbreviation=args.mod_train, topic=args.datatype_train, stats=stats,
+                        dataset_id=training_set["dataset_id"])
