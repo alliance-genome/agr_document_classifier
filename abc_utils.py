@@ -21,9 +21,9 @@ job_category_topic_map = {
     "catalytic_activity": "ATP:0000061",
     "disease": "ATP:0000011",
     "expression": "ATP:0000010",
-    "interaction": "ATP:0000015",  # TODO: confirm this
+    "interaction": "ATP:0000068",
     "physical_interaction": "ATP:0000069",
-    "RNAi": "ATP:0000082",  # TODO: confirm this
+    "RNAi": "ATP:0000082",
 }
 
 
