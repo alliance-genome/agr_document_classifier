@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -359,10 +360,13 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model_path, s
         "dataset_id": dataset_id
     }
 
+    model_data_json =json.dumps(metadata)
+
     # Prepare the files payload
     files = {
-        "file": open(model_path, "rb"),
-        "metadata": (None, json.dumps(metadata), "application/json")
+        "file": (f"{mod_abbreviation}_{topic.replace(':', '_')}.{file_extension}", open(model_path, "rb"),
+                 "application/octet-stream"),
+        "model_data_file": ("model_data.txt", io.BytesIO(model_data_json.encode('utf-8')), "text/plain")
     }
 
     # Make the request to upload the model
