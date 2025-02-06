@@ -356,7 +356,7 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model_path, s
         "precision": stats["average_precision"],
         "recall": stats["average_recall"],
         "f1_score": stats["average_f1"],
-        "parameters": stats["best_params"],
+        "parameters": str(stats["best_params"]),
         "dataset_id": dataset_id
     }
 

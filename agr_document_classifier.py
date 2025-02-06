@@ -451,9 +451,14 @@ if __name__ == '__main__':
             logger.info("Skipping training. Uploading pre-existing model and stats file to ABC")
             stats = json.load(open(f"/data/agr_document_classifier/training/{args.mod_train}_" +
                                    f"{args.datatype_train.replace(':', '_')}_metadata.json"))
+            stats["best_params"] = stats["parameters"]
+            stats["model_name"] = stats["model_type"]
+            stats["average_precision"] = stats["precision"]
+            stats["average_recall"] = stats["recall"]
+            stats["average_f1"] = stats["f1_score"]
             upload_classification_model(mod_abbreviation=args.mod_train, topic=args.datatype_train,
                                         model_path=f"/data/agr_document_classifier/training/{args.mod_train}_"
-                                                   f"{args.datatype_train.replace(':', '_')}.joblib",
+                                                   f"{args.datatype_train.replace(':', '_')}_classifier.joblib",
                                         stats=stats, dataset_id=training_set["dataset_id"], file_extension="joblib")
         else:
             classifier, stats = train_classifier(
