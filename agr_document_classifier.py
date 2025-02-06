@@ -404,6 +404,7 @@ if __name__ == '__main__':
             classifier_file_path = f"/data/agr_document_classifier/{mod_abbr}_{datatype}_classifier.joblib"
             try:
                 load_classifier(mod_abbr, topic, classifier_file_path)
+                logger.info(f"Classification model downloaded for mod: {mod_abbr}, topic: {topic} ({datatype}).")
             except requests.exceptions.HTTPError as e:
                 if e.response.status_code == 404:
                     logger.warning(f"Classification model not found for mod: {mod_abbr}, topic: {topic} ({datatype}). "
