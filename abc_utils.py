@@ -360,6 +360,11 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model_path, s
         "dataset_id": dataset_id
     }
 
+    model_dir = os.path.dirname(model_path)
+    metadata_filename = f"{metadata['task_type']}_{mod_abbreviation}_{topic}_metadata.json"
+    metadata_path = os.path.join(model_dir, metadata_filename)
+    with open(metadata_path, "w") as metadata_file:
+        json.dump(metadata, metadata_file, indent=4)
     model_data_json = json.dumps(metadata)
 
     # Prepare the files payload
@@ -376,8 +381,9 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model_path, s
 
     if response.status_code == 201:
         logger.info("Model uploaded successfully.")
-        logger.info(f"A copy of the model has been saved at: {model_path}.")
+        logger.info(f"A copy of the model has been saved to: {model_path}.")
         logger.info(f"The following metadata was uploaded: {metadata}")
+        logger.info(f"Metadata file saved to: {metadata_path}")
     else:
         logger.error(f"Failed to upload model: {response.text}")
         response.raise_for_status()
