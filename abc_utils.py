@@ -360,7 +360,7 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model_path, s
         "dataset_id": dataset_id
     }
 
-    model_data_json =json.dumps(metadata)
+    model_data_json = json.dumps(metadata)
 
     # Prepare the files payload
     files = {
@@ -370,11 +370,13 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model_path, s
     }
 
     # Make the request to upload the model
-    response = requests.post(upload_url, headers=headers, files=files)
+    mod_headers = headers.copy()
+    del mod_headers["Content-Type"]
+    response = requests.post(upload_url, headers=mod_headers, files=files, data=metadata)
 
     if response.status_code == 201:
         logger.info("Model uploaded successfully.")
-        logger.info(f"A temporary copy of the model has been saved at: {model_path}.")
+        logger.info(f"A copy of the model has been saved at: {model_path}.")
         logger.info(f"The following metadata was uploaded: {metadata}")
     else:
         logger.error(f"Failed to upload model: {response.text}")
