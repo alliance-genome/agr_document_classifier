@@ -11,6 +11,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Tuple, List
+from urllib.error import HTTPError
 
 import fasttext
 import joblib
@@ -392,43 +393,42 @@ if __name__ == '__main__':
         for (mod_id, datatype), jobs in mod_datatype_jobs.items():
             mod_abbr = get_cached_mod_abbreviation_from_id(mod_id)
             datatype = datatype.replace(" ", "_")
-            if datatype != "catalytic_activity" or mod_abbr != "WB":
-                continue
             tet_source_id = get_tet_source_id(mod_abbreviation=mod_abbr)
             reference_curie_job_map = {job["reference_curie"]: job for job in jobs}
             os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
-            if len(os.listdir("/data/agr_document_classifier/to_classify")) == 0:
-                logger.info("Empty file dir. Downloading TEI files from ABC server")
-                download_tei_files_for_references(list(reference_curie_job_map.keys()),
-                                                  "/data/agr_document_classifier/to_classify", mod_abbr)
-            else:
-                logger.info("Using existing TEI files")
-
+            logger.info("Cleaning up existing files in the to_classify directory")
+            for file in os.listdir("/data/agr_document_classifier/to_classify"):
+                os.remove(os.path.join("/data/agr_document_classifier/to_classify", file))
+            download_tei_files_for_references(list(reference_curie_job_map.keys()),
+                                              "/data/agr_document_classifier/to_classify", mod_abbr)
             topic = job_category_topic_map[datatype]
-            files_loaded, classifications, conf_scores = classify_documents(
-                mod_abbreviation=args.mod_train, topic=topic,
-                embedding_model_path=args.embedding_model_path,
-                classifier_model_path=f"/data/agr_document_classifier/{mod_abbr}_{datatype}.joblib",
-                input_docs_dir="/data/agr_document_classifier/to_classify")
+            classifier_file_path = f"/data/agr_document_classifier/{mod_abbr}_{datatype}_classifier.joblib"
+            try:
+                load_classifier(mod_abbr, topic, classifier_file_path)
+                files_loaded, classifications, conf_scores = classify_documents(
+                    mod_abbreviation=args.mod_train, topic=topic,
+                    embedding_model_path=args.embedding_model_path,
+                    classifier_model_path=classifier_file_path,
+                    input_docs_dir="/data/agr_document_classifier/to_classify")
 
-            total_files = len(files_loaded)
-            start_time = time.time()
-            last_reported = 0
+                for idx, (file_path, classification, conf_score) in enumerate(zip(files_loaded, classifications, conf_scores), start=1):
+                    confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
+                            conf_score < 0.75) else "High"
+                    reference_curie = file_path.split("/")[-1].replace("_", ":")[:-4]
+                    result = send_classification_tag_to_abc(reference_curie, mod_abbr, job_category_topic_map[datatype],
+                                                            negated=bool(classification == 0),
+                                                            confidence_level=confidence_level, tet_source_id=tet_source_id)
+                    if result is True:
+                        set_job_started(reference_curie_job_map[reference_curie])
+                        set_job_success(reference_curie_job_map[reference_curie])
+                    else:
+                        # TODO: reset job status to "needs classification"
+                        pass
+                    os.remove(file_path)
+            except HTTPError as e:
+                logger.warning(f"Classification model not found for mod: {mod_abbr}, topic: {topic}. Skipping.")
+                continue
 
-            for idx, (file_path, classification, conf_score) in enumerate(zip(files_loaded, classifications, conf_scores), start=1):
-                confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
-                        conf_score < 0.75) else "High"
-                reference_curie = file_path.split("/")[-1].replace("_", ":")[:-4]
-                result = send_classification_tag_to_abc(reference_curie, mod_abbr, job_category_topic_map[datatype],
-                                                        negated=bool(classification == 0),
-                                                        confidence_level=confidence_level, tet_source_id=tet_source_id)
-                if result is True:
-                    set_job_started(reference_curie_job_map[reference_curie])
-                    set_job_success(reference_curie_job_map[reference_curie])
-                else:
-                    # TODO: reset job status to "needs classification"
-                    pass
-                os.remove(file_path)
 
     else:
         training_data_dir = "/data/agr_document_classifier/training"
