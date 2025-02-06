@@ -361,7 +361,7 @@ def upload_classification_model(mod_abbreviation: str, topic: str, model_path, s
     }
 
     model_dir = os.path.dirname(model_path)
-    metadata_filename = f"{metadata['task_type']}_{mod_abbreviation}_{topic.replace(':', '_')}_metadata.json"
+    metadata_filename = f"{mod_abbreviation}_{topic.replace(':', '_')}_metadata.json"
     metadata_path = os.path.join(model_dir, metadata_filename)
     with open(metadata_path, "w") as metadata_file:
         json.dump(metadata, metadata_file, indent=4)

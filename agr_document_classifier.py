@@ -344,6 +344,9 @@ if __name__ == '__main__':
                         help="Assume that tei files from training set are already present and do not download them "
                              "again",
                         required=False)
+    parser.add_argument("-N", "--skip_training", action="store_true",
+                        help="Just upload a pre-existing model and stats file to the ABC without training",
+                        required=False)
     parser.add_argument("-l", "--log_level", type=str,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help="Set the logging level")
@@ -444,11 +447,20 @@ if __name__ == '__main__':
             download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative,
                                                        output_dir=training_data_dir,
                                                        mod_abbreviation=args.mod_train)
-        classifier, stats = train_classifier(
-            embedding_model_path=args.embedding_model_path,
-            training_data_dir=training_data_dir,
-            weighted_average_word_embedding=args.weighted_average_word_embedding,
-            standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
-            sections_to_use=args.sections_to_use)
-        save_classifier(classifier=classifier, mod_abbreviation=args.mod_train, topic=args.datatype_train, stats=stats,
-                        dataset_id=training_set["dataset_id"])
+        if args.skip_training:
+            logger.info("Skipping training. Uploading pre-existing model and stats file to ABC")
+            stats = json.load(open(f"/data/agr_document_classifier/training/{args.mod_train}_" +
+                                   f"{args.datatype_train.replace(':', '_')}_metadata.json"))
+            upload_classification_model(mod_abbreviation=args.mod_train, topic=args.datatype_train,
+                                        model_path=f"/data/agr_document_classifier/training/{args.mod_train}_"
+                                                   f"{args.datatype_train.replace(':', '_')}.joblib",
+                                        stats=stats, dataset_id=training_set["dataset_id"], file_extension="joblib")
+        else:
+            classifier, stats = train_classifier(
+                embedding_model_path=args.embedding_model_path,
+                training_data_dir=training_data_dir,
+                weighted_average_word_embedding=args.weighted_average_word_embedding,
+                standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
+                sections_to_use=args.sections_to_use)
+            save_classifier(classifier=classifier, mod_abbreviation=args.mod_train, topic=args.datatype_train,
+                            stats=stats, dataset_id=training_set["dataset_id"])
