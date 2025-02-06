@@ -17,6 +17,7 @@ import fasttext
 import joblib
 import nltk
 import numpy as np
+import requests.exceptions
 from gensim.models import KeyedVectors
 from grobid_client import Client
 from grobid_client.api.pdf import process_fulltext_document
@@ -403,9 +404,10 @@ if __name__ == '__main__':
             classifier_file_path = f"/data/agr_document_classifier/{mod_abbr}_{datatype}_classifier.joblib"
             try:
                 load_classifier(mod_abbr, topic, classifier_file_path)
-            except HTTPError as e:
-                if e.code == 404:
-                    logger.warning(f"Classification model not found for mod: {mod_abbr}, topic: {topic}. Skipping.")
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 404:
+                    logger.warning(f"Classification model not found for mod: {mod_abbr}, topic: {topic} ({datatype}). "
+                                   f"Skipping.")
                     continue
                 else:
                     raise
