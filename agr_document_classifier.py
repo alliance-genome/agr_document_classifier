@@ -447,6 +447,9 @@ if __name__ == '__main__':
                         # TODO: reset job status to "needs classification"
                         pass
                     os.remove(file_path)
+                logger.info(f"Finished processing batch of {len(files_loaded)} jobs.")
+            logger.info(f"Finished processing jobs for mod: {mod_abbr}, topic: {topic} ({datatype}).")
+        logger.info("Finished processing all jobs.")
 
     else:
         training_data_dir = "/data/agr_document_classifier/training"
