@@ -414,7 +414,7 @@ if __name__ == '__main__':
                 job_batch = jobs_to_process[:classification_batch_size]
                 jobs_to_process = jobs_to_process[classification_batch_size:]
 
-                reference_curie_job_map = {job["reference_curie"]: job for job in jobs}
+                reference_curie_job_map = {job["reference_curie"]: job for job in jobs_to_process}
                 os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
                 logger.info("Cleaning up existing files in the to_classify directory")
                 for file in os.listdir("/data/agr_document_classifier/to_classify"):
