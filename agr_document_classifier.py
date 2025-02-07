@@ -247,7 +247,7 @@ def remove_stopwords(text):
 def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
     documents = []
     client = None
-    for file_path in glob.glob(input_docs_dir):
+    for file_path in glob.glob(os.path.join(input_docs_dir, "*")):
         file_obj = Path(file_path)
         if file_path.endswith(".tei") or file_path.endswith(".pdf"):
             with file_obj.open("rb") as fin:
