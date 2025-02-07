@@ -281,7 +281,7 @@ def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
 
 def classify_documents(mod_abbreviation, topic, embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
     embedding_model = load_embedding_model(model_path=embedding_model_path)
-    load_classifier(mod_abbreviation, topic, classifier_model_path)
+    # load_classifier(mod_abbreviation, topic, classifier_model_path)
     classifier_model = joblib.load(classifier_model_path)
     X = []
     files_loaded = []
