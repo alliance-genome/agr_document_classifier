@@ -2,7 +2,6 @@ import io
 import json
 import logging
 import os
-import time
 import urllib.request
 from typing import List
 from urllib.error import HTTPError

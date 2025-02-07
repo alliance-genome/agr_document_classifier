@@ -8,11 +8,9 @@ import os.path
 import re
 import shutil
 import sys
-import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Tuple, List
-from urllib.error import HTTPError
 
 import fasttext
 import joblib
@@ -30,8 +28,8 @@ from sklearn.metrics import make_scorer, precision_score, recall_score, f1_score
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
-from abc_utils import get_jobs_to_classify, download_tei_files_for_references, get_curie_from_reference_id, \
-    send_classification_tag_to_abc, get_cached_mod_abbreviation_from_id, \
+from abc_utils import get_jobs_to_classify, download_tei_files_for_references, send_classification_tag_to_abc, \
+    get_cached_mod_abbreviation_from_id, \
     job_category_topic_map, set_job_success, get_tet_source_id, set_job_started, get_training_set_from_abc, \
     upload_classification_model, download_classification_model
 from dataset_downloader import download_tei_files_from_abc_or_convert_pdf
@@ -219,7 +217,7 @@ def load_classifier(mod_abbreviation, topic, file_path):
 
 def get_sentences_from_tei_section(section):
     sentences = []
-    error_count = 0  # Initialize error count
+    num_errors = 0  # Initialize error count
     for paragraph in section.paragraphs:
         if isinstance(paragraph, TextWithRefs):
             paragraph = [paragraph]
@@ -232,10 +230,9 @@ def get_sentences_from_tei_section(section):
                 ):
                     sentences.append(re.sub('<[^<]+>', '', sentence.text))
             except Exception as e:
-                error_count += 1
-                logger.error(f"Error parsing sentences. Total errors so far for reference: {error_count}")
+                num_errors += 1
     sentences = [sentence if sentence.endswith(".") else f"{sentence}." for sentence in sentences]
-    return sentences
+    return sentences, num_errors
 
 
 def remove_stopwords(text):
@@ -271,11 +268,14 @@ def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
                     continue
                 sentences = []
                 for section in article.sections:
-                    sentences.extend(get_sentences_from_tei_section(section))
+                    sec_sentences, sec_num_errors = get_sentences_from_tei_section(section)
+                    sentences.extend(sec_sentences)
+                    num_errors += sec_num_errors
                 abstract = ""
                 for section in article.sections:
                     if section.name == "ABSTRACT":
-                        abstract = " ".join(get_sentences_from_tei_section(section))
+                        abs_sentences, num_errors = get_sentences_from_tei_section(section)
+                        abstract = " ".join(abs_sentences)
                         break
                 documents.append((file_path, " ".join(sentences), article.title, abstract))
         if num_errors > 0:
@@ -378,10 +378,6 @@ if __name__ == '__main__':
         jobs_already_added = set()
         logger.info("Loading jobs to classify from ABC ...")
 
-        start_time = time.time()
-        last_reported = 0
-        total_jobs_estimate = 10000  # Adjust this number if you have an estimate
-
         while all_jobs := get_jobs_to_classify(limit, offset):
             total_jobs = len(all_jobs)
             for i, job in enumerate(all_jobs, start=1):
@@ -420,7 +416,7 @@ if __name__ == '__main__':
             while len(jobs_to_process) > 0:
                 job_batch = jobs_to_process[:classification_batch_size]
                 jobs_to_process = jobs_to_process[classification_batch_size:]
-
+                logger.info(f"Processing batch of {len(job_batch)} jobs. {len(jobs_to_process)} jobs left to process.")
                 reference_curie_job_map = {job["reference_curie"]: job for job in job_batch}
                 os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
                 logger.info("Cleaning up existing files in the to_classify directory")
@@ -434,7 +430,9 @@ if __name__ == '__main__':
                     embedding_model=embedding_model,
                     classifier_model=classifier_model,
                     input_docs_dir="/data/agr_document_classifier/to_classify")
+                logger.info("Finished classifying documents.")
 
+                logger.info("Sending classification tags to ABC.")
                 for idx, (file_path, classification, conf_score) in enumerate(zip(files_loaded, classifications, conf_scores), start=1):
                     confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
                             conf_score < 0.75) else "High"
