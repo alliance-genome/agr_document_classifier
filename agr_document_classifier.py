@@ -392,6 +392,7 @@ if __name__ == '__main__':
             offset += limit
 
         logger.info("Finished loading jobs to classify from ABC ...")
+        embedding_model = load_embedding_model(args.embedding_model_path)
 
         for (mod_id, datatype), jobs in mod_datatype_jobs.items():
             mod_abbr = get_cached_mod_abbreviation_from_id(mod_id)
@@ -411,7 +412,6 @@ if __name__ == '__main__':
                     raise
             classification_batch_size = int(os.environ.get("CLASSIFICATION_BATCH_SIZE", 1000))
             jobs_to_process = copy.deepcopy(jobs)
-            embedding_model = load_embedding_model(args.embedding_model_path)
             classifier_model = joblib.load(classifier_file_path)
             while len(jobs_to_process) > 0:
                 job_batch = jobs_to_process[:classification_batch_size]
