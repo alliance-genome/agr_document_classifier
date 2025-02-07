@@ -408,7 +408,7 @@ if __name__ == '__main__':
                     continue
                 else:
                     raise
-            classification_batch_size = os.environ.get("CLASSIFICATION_BATCH_SIZE", 1000)
+            classification_batch_size = int(os.environ.get("CLASSIFICATION_BATCH_SIZE", 1000))
             jobs_to_process = copy.deepcopy(jobs)
             while len(jobs_to_process) > 0:
                 job_batch = jobs_to_process[:classification_batch_size]
