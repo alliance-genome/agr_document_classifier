@@ -27,19 +27,6 @@ job_category_topic_map = {
 }
 
 
-def report_progress(current, total, start_time, last_reported, interval_percentage):
-    if interval_percentage <= 0:
-        return last_reported  # No progress reporting if interval is 0 or negative
-
-    percent_complete = (current / total) * 100
-    if percent_complete - last_reported >= interval_percentage or current == total:
-        elapsed_time = time.time() - start_time
-        logger.info(f"Progress: {percent_complete:.2f}% complete ({current}/{total}), "
-                    f"Elapsed time: {elapsed_time:.2f}s")
-        last_reported = percent_complete
-    return last_reported
-
-
 def get_mod_species_map():
     url = f'https://{blue_api_base_url}/mod/taxons/default'
     request = urllib.request.Request(url=url)
@@ -291,10 +278,7 @@ def download_main_pdf(agr_curie, mod_abbreviation, file_name, output_dir):
 
 
 def download_tei_files_for_references(reference_curies: List[str], output_dir: str, mod_abbreviation, progress_interval=0.0):
-    total_references = len(reference_curies)
-    start_time = time.time()
-    last_reported = 0
-
+    logger.info("Started downloading TEI files")
     for idx, reference_curie in enumerate(reference_curies, start=1):
         all_reffiles_for_pap_api = f'https://{blue_api_base_url}/reference/referencefile/show_all/{reference_curie}'
         request = urllib.request.Request(url=all_reffiles_for_pap_api)
@@ -314,9 +298,7 @@ def download_tei_files_for_references(reference_curies: List[str], output_dir: s
                                 out_file.write(file_content)
         except HTTPError as e:
             logger.error(e)
-
-        # Report progress
-        last_reported = report_progress(idx, total_references, start_time, last_reported, progress_interval)
+    logger.info("Finished downloading TEI files")
 
 
 def convert_pdf_with_grobid(file_content):
