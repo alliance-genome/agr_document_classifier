@@ -283,9 +283,12 @@ def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
     return documents
 
 
-def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
-    embedding_model = load_embedding_model(model_path=embedding_model_path)
-    classifier_model = joblib.load(classifier_model_path)
+def classify_documents(input_docs_dir: str, embedding_model_path: str = None, classifier_model_path: str = None,
+                       embedding_model=None, classifier_model=None):
+    if embedding_model is None:
+        embedding_model = load_embedding_model(model_path=embedding_model_path)
+    if classifier_model is None:
+        classifier_model = joblib.load(classifier_model_path)
     X = []
     files_loaded = []
 
@@ -412,6 +415,8 @@ if __name__ == '__main__':
                     raise
             classification_batch_size = int(os.environ.get("CLASSIFICATION_BATCH_SIZE", 1000))
             jobs_to_process = copy.deepcopy(jobs)
+            embedding_model = load_embedding_model(args.embedding_model_path)
+            classifier_model = joblib.load(classifier_file_path)
             while len(jobs_to_process) > 0:
                 job_batch = jobs_to_process[:classification_batch_size]
                 jobs_to_process = jobs_to_process[classification_batch_size:]
@@ -426,8 +431,8 @@ if __name__ == '__main__':
                                                   "/data/agr_document_classifier/to_classify", mod_abbr)
 
                 files_loaded, classifications, conf_scores = classify_documents(
-                    embedding_model_path=args.embedding_model_path,
-                    classifier_model_path=classifier_file_path,
+                    embedding_model=embedding_model,
+                    classifier_model=classifier_model,
                     input_docs_dir="/data/agr_document_classifier/to_classify")
 
                 for idx, (file_path, classification, conf_score) in enumerate(zip(files_loaded, classifications, conf_scores), start=1):
