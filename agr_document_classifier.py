@@ -249,6 +249,7 @@ def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
     documents = []
     client = None
     for file_path in glob.glob(os.path.join(input_docs_dir, "*")):
+        num_errors = 0
         file_obj = Path(file_path)
         if file_path.endswith(".tei") or file_path.endswith(".pdf"):
             with file_obj.open("rb") as fin:
@@ -266,7 +267,7 @@ def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
                 try:
                     article: Article = TEI.parse(file_stream, figures=True)
                 except Exception as e:
-                    logger.error(f"Error parsing TEI file for {str(file_path)}: {str(e)}")
+                    num_errors += 1
                     continue
                 sentences = []
                 for section in article.sections:
@@ -277,6 +278,8 @@ def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
                         abstract = " ".join(get_sentences_from_tei_section(section))
                         break
                 documents.append((file_path, " ".join(sentences), article.title, abstract))
+        if num_errors > 0:
+            logger.warning(f"Couldn't read {str(num_errors)} sentence(s) from {str(file_path)}")
     return documents
 
 
