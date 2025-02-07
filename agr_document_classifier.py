@@ -280,9 +280,8 @@ def get_documents(input_docs_dir: str) -> List[Tuple[str, str, str, str]]:
     return documents
 
 
-def classify_documents(mod_abbreviation, topic, embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
+def classify_documents(embedding_model_path: str, classifier_model_path: str, input_docs_dir: str):
     embedding_model = load_embedding_model(model_path=embedding_model_path)
-    # load_classifier(mod_abbreviation, topic, classifier_model_path)
     classifier_model = joblib.load(classifier_model_path)
     X = []
     files_loaded = []
@@ -424,7 +423,6 @@ if __name__ == '__main__':
                                                   "/data/agr_document_classifier/to_classify", mod_abbr)
 
                 files_loaded, classifications, conf_scores = classify_documents(
-                    mod_abbreviation=args.mod_train, topic=topic,
                     embedding_model_path=args.embedding_model_path,
                     classifier_model_path=classifier_file_path,
                     input_docs_dir="/data/agr_document_classifier/to_classify")
