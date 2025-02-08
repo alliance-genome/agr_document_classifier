@@ -23,6 +23,7 @@ job_category_topic_map = {
     "interaction": "ATP:0000068",
     "physical_interaction": "ATP:0000069",
     "RNAi": "ATP:0000082",
+    "antibody": "ATP:0000096"
 }
 
 
