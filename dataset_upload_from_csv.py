@@ -1,5 +1,6 @@
 import csv
 import logging
+import sys
 
 from abc_utils import get_curie_from_xref, create_dataset, add_entry_to_dataset
 
@@ -37,5 +38,12 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--mod-abbreviation", help="Mod abbreviation")
     parser.add_argument("-T", "--topic", help="Topic of the dataset")
     args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        stream=sys.stdout
+    )
 
     upload_dataset_from_csv(args.csv_file, args.title, args.description, args.mod_abbreviation, args.topic)

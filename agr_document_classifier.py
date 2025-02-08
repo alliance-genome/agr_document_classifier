@@ -111,7 +111,7 @@ def train_classifier(embedding_model_path: str, training_data_dir: str, weighted
     # For each document in your training data, extract embeddings and labels
     logger.info("Loading training set")
     for label in ["positive", "negative"]:
-        documents = list(get_documents(os.path.join(training_data_dir, label, "*")))
+        documents = list(get_documents(os.path.join(training_data_dir, label)))
 
         for idx, (_, fulltext, title, abstract) in enumerate(documents, start=1):
             text = ""
