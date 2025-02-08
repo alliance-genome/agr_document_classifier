@@ -4,8 +4,6 @@ import sys
 
 from abc_utils import get_curie_from_xref, create_dataset, add_entry_to_dataset
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
