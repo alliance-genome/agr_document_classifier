@@ -18,7 +18,7 @@ cache = TTLCache(maxsize=100, ttl=7200)
 
 job_category_topic_map = {
     "catalytic_activity": "ATP:0000061",
-    "disease": "ATP:0000011",
+    "disease": "ATP:0000152",
     "expression": "ATP:0000010",
     "interaction": "ATP:0000068",
     "physical_interaction": "ATP:0000069",
