@@ -59,12 +59,16 @@ def get_document_embedding(model, document, weighted_average_word_embedding: boo
     if isinstance(model, KeyedVectors):
         vocab = set(model.key_to_index.keys())
         valid_words = [word for word in words if word in vocab]
+        if not valid_words:
+            return np.zeros(model.vector_size)
         embeddings = model[valid_words]
         if word_to_index is None:
             word_to_index = model.key_to_index
     else:
         vocab = set(model.get_words())
         valid_words = [word for word in words if word in vocab]
+        if not valid_words:
+            return np.zeros(model.get_dimension())
         embeddings = np.array([model.get_word_vector(word) for word in valid_words])
         if word_to_index is None:
             word_to_index = {word: idx for idx, word in enumerate(model.get_words())}
