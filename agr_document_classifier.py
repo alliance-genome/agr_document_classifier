@@ -38,8 +38,17 @@ from models import POSSIBLE_CLASSIFIERS
 nltk.download('stopwords')
 nltk.download('punkt')
 
-# Configure the logging in the main script
-logger = logging.getLogger(__name__)
+
+def configure_logging(log_level):
+    # Configure logging based on the log_level argument
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper(), logging.INFO),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        stream=sys.stdout
+    )
+    global logger
+    logger = logging.getLogger(__name__)
 
 
 def get_document_embedding(model, document, weighted_average_word_embedding: bool = False,
@@ -330,7 +339,7 @@ def save_stats_file(stats, file_path, task_type, mod_abbreviation, topic, versio
         json.dump(model_data, stats_file, indent=4)
 
 
-if __name__ == '__main__':
+def parse_arguments():
     parser = argparse.ArgumentParser(description='Classify documents or train document classifiers')
     parser.add_argument("-m", "--mode", type=str, choices=['train', 'classify'], default="classify",
                         help="Mode of operation: train or classify")
@@ -358,136 +367,163 @@ if __name__ == '__main__':
     parser.add_argument("-l", "--log_level", type=str,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help="Set the logging level")
+    return parser.parse_args()
 
-    args = parser.parse_args()
 
-    # Configure logging based on the log_level argument
-    logging.basicConfig(
-        level=getattr(logging, args.log_level.upper(), logging.INFO),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        stream=sys.stdout
-    )
+def load_jobs_to_classify():
+    mod_datatype_jobs = defaultdict(list)
+    limit = 1000
+    offset = 0
+    jobs_already_added = set()
+    logger.info("Loading jobs to classify from ABC ...")
 
-    logger = logging.getLogger(__name__)
+    while all_jobs := get_jobs_to_classify(limit, offset):
+        for job in all_jobs:
+            reference_id = job["reference_id"]
+            datatype = job["job_name"].replace("_classification_job", "")
+            mod_id = job["mod_id"]
+            if (mod_id, datatype, reference_id) not in jobs_already_added:
+                mod_datatype_jobs[(mod_id, datatype)].append(job)
+                jobs_already_added.add((mod_id, datatype, reference_id))
+        offset += limit
+
+    logger.info("Finished loading jobs to classify from ABC ...")
+    return mod_datatype_jobs
+
+
+def process_classification_jobs(mod_id, datatype, jobs, embedding_model):
+    mod_abbr = get_cached_mod_abbreviation_from_id(mod_id)
+    datatype = datatype.replace(" ", "_")
+    tet_source_id = get_tet_source_id(mod_abbreviation=mod_abbr)
+    topic = job_category_topic_map[datatype]
+    classifier_file_path = f"/data/agr_document_classifier/{mod_abbr}_{datatype}_classifier.joblib"
+    load_classifier(mod_abbr, topic, classifier_file_path)
+    classification_batch_size = int(os.environ.get("CLASSIFICATION_BATCH_SIZE", 1000))
+    jobs_to_process = copy.deepcopy(jobs)
+    classifier_model = joblib.load(classifier_file_path)
+    while jobs_to_process:
+        job_batch = jobs_to_process[:classification_batch_size]
+        jobs_to_process = jobs_to_process[classification_batch_size:]
+        process_job_batch(job_batch, mod_abbr, topic, tet_source_id, embedding_model, classifier_model)
+
+
+def process_job_batch(job_batch, mod_abbr, topic, tet_source_id, embedding_model, classifier_model):
+    reference_curie_job_map = {job["reference_curie"]: job for job in job_batch}
+    prepare_classification_directory()
+    download_tei_files_for_references(list(reference_curie_job_map.keys()),
+                                      "/data/agr_document_classifier/to_classify", mod_abbr)
+    files_loaded, classifications, conf_scores = classify_documents(
+        embedding_model=embedding_model,
+        classifier_model=classifier_model,
+        input_docs_dir="/data/agr_document_classifier/to_classify")
+    send_classification_results(files_loaded, classifications, conf_scores, reference_curie_job_map, mod_abbr, topic, tet_source_id)
+
+
+def prepare_classification_directory():
+    os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
+    logger.info("Cleaning up existing files in the to_classify directory")
+    for file in os.listdir("/data/agr_document_classifier/to_classify"):
+        os.remove(os.path.join("/data/agr_document_classifier/to_classify", file))
+
+
+def send_classification_results(files_loaded, classifications, conf_scores, reference_curie_job_map, mod_abbr, topic, tet_source_id):
+    logger.info("Sending classification tags to ABC.")
+    for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
+        confidence_level = get_confidence_level(classification, conf_score)
+        reference_curie = file_path.split("/")[-1].replace("_", ":")[:-4]
+        result = send_classification_tag_to_abc(reference_curie, mod_abbr, job_category_topic_map[topic],
+                                                negated=bool(classification == 0),
+                                                confidence_level=confidence_level, tet_source_id=tet_source_id)
+        if result:
+            set_job_started(reference_curie_job_map[reference_curie])
+            set_job_success(reference_curie_job_map[reference_curie])
+        os.remove(file_path)
+    logger.info(f"Finished processing batch of {len(files_loaded)} jobs.")
+
+
+def get_confidence_level(classification, conf_score):
+    if classification == 0:
+        return "NEG"
+    elif conf_score < 0.5:
+        return "Low"
+    elif conf_score < 0.75:
+        return "Med"
+    else:
+        return "High"
+
+
+def download_training_set(args, training_data_dir):
+    training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
+    reference_ids_positive = [agrkbid for agrkbid, positive in training_set["data_training"].items() if positive]
+    reference_ids_negative = [agrkbid for agrkbid, positive in training_set["data_training"].items() if not positive]
+    shutil.rmtree(os.path.join(training_data_dir, "positive"), ignore_errors=True)
+    shutil.rmtree(os.path.join(training_data_dir, "negative"), ignore_errors=True)
+    os.makedirs(os.path.join(training_data_dir, "positive"), exist_ok=True)
+    os.makedirs(os.path.join(training_data_dir, "negative"), exist_ok=True)
+    download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative,
+                                               output_dir=training_data_dir,
+                                               mod_abbreviation=args.mod_train)
+    return training_set
+
+
+def upload_pre_existing_model(args, training_set):
+    logger.info("Skipping training. Uploading pre-existing model and stats file to ABC")
+    stats = json.load(open(f"/data/agr_document_classifier/training/{args.mod_train}_" +
+                           f"{args.datatype_train.replace(':', '_')}_metadata.json"))
+    stats["best_params"] = stats["parameters"]
+    stats["model_name"] = stats["model_type"]
+    stats["average_precision"] = stats["precision"]
+    stats["average_recall"] = stats["recall"]
+    stats["average_f1"] = stats["f1_score"]
+    upload_classification_model(mod_abbreviation=args.mod_train, topic=args.datatype_train,
+                                model_path=f"/data/agr_document_classifier/training/{args.mod_train}_"
+                                           f"{args.datatype_train.replace(':', '_')}_classifier.joblib",
+                                stats=stats, dataset_id=training_set["dataset_id"], file_extension="joblib")
+
+
+def train_and_save_model(args, training_data_dir, training_set):
+    classifier, stats = train_classifier(
+        embedding_model_path=args.embedding_model_path,
+        training_data_dir=training_data_dir,
+        weighted_average_word_embedding=args.weighted_average_word_embedding,
+        standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
+        sections_to_use=args.sections_to_use)
+    logger.info(f"Best classifier stats: {str(stats)}")
+    save_classifier(classifier=classifier, mod_abbreviation=args.mod_train, topic=args.datatype_train,
+                    stats=stats, dataset_id=training_set["dataset_id"])
+
+
+def train_mode(args):
+    training_data_dir = "/data/agr_document_classifier/training"
+    if args.skip_training_set_download:
+        logger.info("Skipping training set download")
+        training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train,
+                                                 metadata_only=True)
+    else:
+        training_set = download_training_set(args, training_data_dir)
+    if args.skip_training:
+        upload_pre_existing_model(args, training_set)
+    else:
+        train_and_save_model(args, training_data_dir, training_set)
+
+
+def classify_mode(args):
+    mod_datatype_jobs = load_jobs_to_classify()
+    embedding_model = load_embedding_model(args.embedding_model_path)
+
+    for (mod_id, datatype), jobs in mod_datatype_jobs.items():
+        process_classification_jobs(mod_id, datatype, jobs, embedding_model)
+
+
+def main():
+    args = parse_arguments()
+    configure_logging(args.log_level)
 
     if args.mode == "classify":
-        mod_datatype_jobs = defaultdict(list)
-        limit = 1000
-        offset = 0
-        jobs_already_added = set()
-        logger.info("Loading jobs to classify from ABC ...")
-
-        while all_jobs := get_jobs_to_classify(limit, offset):
-            total_jobs = len(all_jobs)
-            for i, job in enumerate(all_jobs, start=1):
-                reference_id = job["reference_id"]
-                datatype = job["job_name"].replace("_classification_job", "")
-                mod_id = job["mod_id"]
-                if (mod_id, datatype, reference_id) not in jobs_already_added:
-                    mod_datatype_jobs[(mod_id, datatype)].append(job)
-                    jobs_already_added.add((mod_id, datatype, reference_id))
-
-                current = offset + i
-            offset += limit
-
-        logger.info("Finished loading jobs to classify from ABC ...")
-        embedding_model = load_embedding_model(args.embedding_model_path)
-
-        for (mod_id, datatype), jobs in mod_datatype_jobs.items():
-            mod_abbr = get_cached_mod_abbreviation_from_id(mod_id)
-            datatype = datatype.replace(" ", "_")
-            tet_source_id = get_tet_source_id(mod_abbreviation=mod_abbr)
-            topic = job_category_topic_map[datatype]
-            classifier_file_path = f"/data/agr_document_classifier/{mod_abbr}_{datatype}_classifier.joblib"
-            try:
-                load_classifier(mod_abbr, topic, classifier_file_path)
-                logger.info(f"Classification model downloaded for mod: {mod_abbr}, topic: {topic} ({datatype}).")
-            except requests.exceptions.HTTPError as e:
-                if e.response.status_code == 404:
-                    logger.warning(f"Classification model not found for mod: {mod_abbr}, topic: {topic} ({datatype}). "
-                                   f"Skipping.")
-                    continue
-                else:
-                    raise
-            classification_batch_size = int(os.environ.get("CLASSIFICATION_BATCH_SIZE", 1000))
-            jobs_to_process = copy.deepcopy(jobs)
-            classifier_model = joblib.load(classifier_file_path)
-            while len(jobs_to_process) > 0:
-                job_batch = jobs_to_process[:classification_batch_size]
-                jobs_to_process = jobs_to_process[classification_batch_size:]
-                logger.info(f"Processing batch of {len(job_batch)} jobs. {len(jobs_to_process)} jobs left to process.")
-                reference_curie_job_map = {job["reference_curie"]: job for job in job_batch}
-                os.makedirs("/data/agr_document_classifier/to_classify", exist_ok=True)
-                logger.info("Cleaning up existing files in the to_classify directory")
-                for file in os.listdir("/data/agr_document_classifier/to_classify"):
-                    os.remove(os.path.join("/data/agr_document_classifier/to_classify", file))
-
-                download_tei_files_for_references(list(reference_curie_job_map.keys()),
-                                                  "/data/agr_document_classifier/to_classify", mod_abbr)
-
-                files_loaded, classifications, conf_scores = classify_documents(
-                    embedding_model=embedding_model,
-                    classifier_model=classifier_model,
-                    input_docs_dir="/data/agr_document_classifier/to_classify")
-                logger.info("Finished classifying documents.")
-
-                logger.info("Sending classification tags to ABC.")
-                for idx, (file_path, classification, conf_score) in enumerate(zip(files_loaded, classifications, conf_scores), start=1):
-                    confidence_level = "NEG" if classification == 0 else "Low" if conf_score < 0.5 else "Med" if (
-                            conf_score < 0.75) else "High"
-                    reference_curie = file_path.split("/")[-1].replace("_", ":")[:-4]
-                    result = send_classification_tag_to_abc(reference_curie, mod_abbr, job_category_topic_map[datatype],
-                                                            negated=bool(classification == 0),
-                                                            confidence_level=confidence_level, tet_source_id=tet_source_id)
-                    if result is True:
-                        set_job_started(reference_curie_job_map[reference_curie])
-                        set_job_success(reference_curie_job_map[reference_curie])
-                    else:
-                        # TODO: reset job status to "needs classification"
-                        pass
-                    os.remove(file_path)
-                logger.info(f"Finished processing batch of {len(files_loaded)} jobs.")
-            logger.info(f"Finished processing jobs for mod: {mod_abbr}, topic: {topic} ({datatype}).")
-        logger.info("Finished processing all jobs.")
-
+        classify_mode(args)
     else:
-        training_data_dir = "/data/agr_document_classifier/training"
-        if args.skip_training_set_download:
-            logger.info("Skipping training set download")
-            training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train,
-                                                     metadata_only=True)
-        else:
-            training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
-            reference_ids_positive = [agrkbid for agrkbid, positive in training_set["data_training"].items() if positive]
-            reference_ids_negative = [agrkbid for agrkbid, positive in training_set["data_training"].items() if not positive]
-            shutil.rmtree(os.path.join(training_data_dir, "positive"), ignore_errors=True)
-            shutil.rmtree(os.path.join(training_data_dir, "negative"), ignore_errors=True)
-            os.makedirs(os.path.join(training_data_dir, "positive"), exist_ok=True)
-            os.makedirs(os.path.join(training_data_dir, "negative"), exist_ok=True)
-            download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative,
-                                                       output_dir=training_data_dir,
-                                                       mod_abbreviation=args.mod_train)
-        if args.skip_training:
-            logger.info("Skipping training. Uploading pre-existing model and stats file to ABC")
-            stats = json.load(open(f"/data/agr_document_classifier/training/{args.mod_train}_" +
-                                   f"{args.datatype_train.replace(':', '_')}_metadata.json"))
-            stats["best_params"] = stats["parameters"]
-            stats["model_name"] = stats["model_type"]
-            stats["average_precision"] = stats["precision"]
-            stats["average_recall"] = stats["recall"]
-            stats["average_f1"] = stats["f1_score"]
-            upload_classification_model(mod_abbreviation=args.mod_train, topic=args.datatype_train,
-                                        model_path=f"/data/agr_document_classifier/training/{args.mod_train}_"
-                                                   f"{args.datatype_train.replace(':', '_')}_classifier.joblib",
-                                        stats=stats, dataset_id=training_set["dataset_id"], file_extension="joblib")
-        else:
-            classifier, stats = train_classifier(
-                embedding_model_path=args.embedding_model_path,
-                training_data_dir=training_data_dir,
-                weighted_average_word_embedding=args.weighted_average_word_embedding,
-                standardize_embeddings=args.standardize_embeddings, normalize_embeddings=args.normalize_embeddings,
-                sections_to_use=args.sections_to_use)
-            logger.info(f"Best classifier stats: {str(stats)}")
-            save_classifier(classifier=classifier, mod_abbreviation=args.mod_train, topic=args.datatype_train,
-                            stats=stats, dataset_id=training_set["dataset_id"])
+        train_mode(args)
+
+
+if __name__ == '__main__':
+    main()
