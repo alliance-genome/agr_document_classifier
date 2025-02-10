@@ -1,7 +1,7 @@
+import io
 import json
 import logging
 import os
-import time
 import urllib.request
 from typing import List
 from urllib.error import HTTPError
@@ -17,21 +17,14 @@ logger = logging.getLogger(__name__)
 cache = TTLCache(maxsize=100, ttl=7200)
 
 job_category_topic_map = {
-    "catalytic_activity": "ATP:0000061"
+    "catalytic_activity": "ATP:0000061",
+    "disease": "ATP:0000152",
+    "expression": "ATP:0000010",
+    "interaction": "ATP:0000068",
+    "physical_interaction": "ATP:0000069",
+    "RNAi": "ATP:0000082",
+    "antibody": "ATP:0000096"
 }
-
-
-def report_progress(current, total, start_time, last_reported, interval_percentage):
-    if interval_percentage <= 0:
-        return last_reported  # No progress reporting if interval is 0 or negative
-
-    percent_complete = (current / total) * 100
-    if percent_complete - last_reported >= interval_percentage or current == total:
-        elapsed_time = time.time() - start_time
-        logger.info(f"Progress: {percent_complete:.2f}% complete ({current}/{total}), "
-                    f"Elapsed time: {elapsed_time:.2f}s")
-        last_reported = percent_complete
-    return last_reported
 
 
 def get_mod_species_map():
@@ -285,10 +278,7 @@ def download_main_pdf(agr_curie, mod_abbreviation, file_name, output_dir):
 
 
 def download_tei_files_for_references(reference_curies: List[str], output_dir: str, mod_abbreviation, progress_interval=0.0):
-    total_references = len(reference_curies)
-    start_time = time.time()
-    last_reported = 0
-
+    logger.info("Started downloading TEI files")
     for idx, reference_curie in enumerate(reference_curies, start=1):
         all_reffiles_for_pap_api = f'https://{blue_api_base_url}/reference/referencefile/show_all/{reference_curie}'
         request = urllib.request.Request(url=all_reffiles_for_pap_api)
@@ -308,9 +298,7 @@ def download_tei_files_for_references(reference_curies: List[str], output_dir: s
                                 out_file.write(file_content)
         except HTTPError as e:
             logger.error(e)
-
-        # Report progress
-        last_reported = report_progress(idx, total_references, start_time, last_reported, progress_interval)
+    logger.info("Finished downloading TEI files")
 
 
 def convert_pdf_with_grobid(file_content):
@@ -321,16 +309,126 @@ def convert_pdf_with_grobid(file_content):
     return response
 
 
-def download_classification_model(mod_abbreviation: str, topic: str):
-    # TODO: Implement this function if needed
-    pass
+def download_classification_model(mod_abbreviation: str, topic: str, output_path: str):
+    download_url = f"https://{blue_api_base_url}/ml_model/download/biocuration_topic_classification/{mod_abbreviation}/{topic}"
+    token = get_authentication_token()
+    headers = generate_headers(token)
+
+    # Make the request to download the model
+    response = requests.get(download_url, headers=headers)
+
+    if response.status_code == 200:
+        with open(output_path, "wb") as model_file:
+            model_file.write(response.content)
+        logger.info("Model downloaded successfully.")
+    else:
+        logger.error(f"Failed to download model: {response.text}")
+        response.raise_for_status()
 
 
-def upload_classification_model(mod_abbreviation: str, topic: str, model_path: str):
-    # TODO: Implement this function if needed
-    pass
+def upload_classification_model(mod_abbreviation: str, topic: str, model_path, stats: dict, dataset_id: int,
+                                file_extension: str):
+    upload_url = f"https://{blue_api_base_url}/ml_model/upload"
+    token = get_authentication_token()
+    headers = generate_headers(token)
+
+    # Prepare the metadata payload
+    metadata = {
+        "task_type": "biocuration_topic_classification",
+        "mod_abbreviation": mod_abbreviation,
+        "topic": topic,
+        "version_num": None,
+        "file_extension": file_extension,
+        "model_type": stats["model_name"],
+        "precision": stats["average_precision"],
+        "recall": stats["average_recall"],
+        "f1_score": stats["average_f1"],
+        "parameters": str(stats["best_params"]),
+        "dataset_id": dataset_id
+    }
+
+    model_dir = os.path.dirname(model_path)
+    metadata_filename = f"{mod_abbreviation}_{topic.replace(':', '_')}_metadata.json"
+    metadata_path = os.path.join(model_dir, metadata_filename)
+    with open(metadata_path, "w") as metadata_file:
+        json.dump(metadata, metadata_file, indent=4)
+    model_data_json = json.dumps(metadata)
+
+    # Prepare the files payload
+    files = {
+        "file": (f"{mod_abbreviation}_{topic.replace(':', '_')}.{file_extension}", open(model_path, "rb"),
+                 "application/octet-stream"),
+        "model_data_file": ("model_data.txt", io.BytesIO(model_data_json.encode('utf-8')), "text/plain")
+    }
+
+    # Make the request to upload the model
+    mod_headers = headers.copy()
+    del mod_headers["Content-Type"]
+    response = requests.post(upload_url, headers=mod_headers, files=files, data=metadata)
+
+    if response.status_code == 201:
+        logger.info("Model uploaded successfully.")
+        logger.info(f"A copy of the model has been saved to: {model_path}.")
+        logger.info(f"The following metadata was uploaded: {metadata}")
+        logger.info(f"Metadata file saved to: {metadata_path}")
+    else:
+        logger.error(f"Failed to upload model: {response.text}")
+        response.raise_for_status()
 
 
-def get_training_set_from_abc(mod_abbreviation: str, topic: str):
-    # TODO: Implement this function if needed
-    pass
+# Function to create a dataset
+def create_dataset(title: str, description: str, mod_abbreviation: str, topic: str, dataset_type: str) -> (int, int):
+    create_dataset_url = f"https://{blue_api_base_url}/datasets/"
+    token = get_authentication_token()
+    headers = generate_headers(token)
+    payload = {
+        "title": title,
+        "description": description,
+        "mod_abbreviation": mod_abbreviation,
+        "data_type": topic,
+        "dataset_type": dataset_type
+    }
+    response = requests.post(create_dataset_url, json=payload, headers=headers)
+    if response.status_code == 201:
+        dataset_id = response.json()["dataset_id"]
+        version = response.json()["version"]
+        logger.info(f"Dataset created with ID: {dataset_id}")
+        return dataset_id, version
+    else:
+        logger.error(f"Failed to create dataset: {response.text}")
+        response.raise_for_status()
+
+
+# Function to add an entry to the dataset
+def add_entry_to_dataset(mod_abbreviation: str, topic: str, dataset_type: str, version: int, reference_curie: str,
+                         positive: bool):
+    add_entry_url = f"https://{blue_api_base_url}/datasets/data_entry/"
+    token = get_authentication_token()
+    headers = generate_headers(token)
+    payload = {
+        "mod_abbreviation": mod_abbreviation,
+        "data_type": topic,
+        "dataset_type": dataset_type,
+        "version": version,
+        "reference_curie": reference_curie,
+        "positive": positive
+    }
+    response = requests.post(add_entry_url, json=payload, headers=headers)
+    if response.status_code == 201:
+        logger.info("Entry added to dataset")
+    else:
+        logger.error(f"Failed to add entry to dataset: {response.text}")
+        response.raise_for_status()
+
+
+def get_training_set_from_abc(mod_abbreviation: str, topic: str, metadata_only: bool = False):
+    endpoint = "metadata" if metadata_only else "download"
+    # TODO download latest version
+    response = requests.get(f"https://{blue_api_base_url}/datasets/{endpoint}/{mod_abbreviation}/{topic}/document/1/")
+    if response.status_code == 200:
+        dataset = response.json()
+        logger.info(f"Dataset {endpoint} downloaded successfully.")
+        return dataset
+    else:
+        logger.error(f"Failed to download dataset {response.text}")
+        response.raise_for_status()

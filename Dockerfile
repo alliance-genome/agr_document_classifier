@@ -6,6 +6,8 @@ WORKDIR /usr/src/app
 ADD ./requirements.txt .
 ADD abc_utils.py .
 ADD agr_document_classifier.py .
+ADD dataset_downloader.py .
+ADD dataset_upload_from_csv.py .
 ADD Makefile .
 ADD models.py .
 ADD crontab /etc/cron.d/agr_document_classifier_crontab
