@@ -444,7 +444,7 @@ def send_classification_results(files_loaded, classifications, conf_scores, refe
     for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
         confidence_level = get_confidence_level(classification, conf_score)
         reference_curie = file_path.split("/")[-1].replace("_", ":")[:-4]
-        result = send_classification_tag_to_abc(reference_curie, mod_abbr, job_category_topic_map[topic],
+        result = send_classification_tag_to_abc(reference_curie, mod_abbr, topic,
                                                 negated=bool(classification == 0),
                                                 confidence_level=confidence_level, tet_source_id=tet_source_id)
         if result:
