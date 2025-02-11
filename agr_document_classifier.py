@@ -417,6 +417,8 @@ def process_classification_jobs(mod_id, datatype, jobs, embedding_model):
     while jobs_to_process:
         job_batch = jobs_to_process[:classification_batch_size]
         jobs_to_process = jobs_to_process[classification_batch_size:]
+        logger.info(f"Processing a batch of {str(classification_batch_size)} jobs. "
+                    f"Jobs remaining to process: {str(len(jobs_to_process))}")
         process_job_batch(job_batch, mod_abbr, topic, tet_source_id, embedding_model, classifier_model)
 
 
