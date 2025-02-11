@@ -401,7 +401,16 @@ def process_classification_jobs(mod_id, datatype, jobs, embedding_model):
     tet_source_id = get_tet_source_id(mod_abbreviation=mod_abbr)
     topic = job_category_topic_map[datatype]
     classifier_file_path = f"/data/agr_document_classifier/{mod_abbr}_{datatype}_classifier.joblib"
-    load_classifier(mod_abbr, topic, classifier_file_path)
+    try:
+        load_classifier(mod_abbr, topic, classifier_file_path)
+        logger.info(f"Classification model downloaded for mod: {mod_abbr}, topic: {topic} ({datatype}).")
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            logger.warning(f"Classification model not found for mod: {mod_abbr}, topic: {topic} ({datatype}). "
+                           f"Skipping.")
+            return
+        else:
+            raise
     classification_batch_size = int(os.environ.get("CLASSIFICATION_BATCH_SIZE", 1000))
     jobs_to_process = copy.deepcopy(jobs)
     classifier_model = joblib.load(classifier_file_path)
