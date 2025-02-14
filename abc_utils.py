@@ -14,7 +14,7 @@ blue_api_base_url = os.environ.get('ABC_API_SERVER', "literature-rest.alliancege
 
 logger = logging.getLogger(__name__)
 
-cache = TTLCache(maxsize=100, ttl=7200)
+cache = {}
 
 job_category_topic_map = {
     "catalytic_activity": "ATP:0000061",
