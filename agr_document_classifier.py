@@ -431,7 +431,8 @@ def process_job_batch(job_batch, mod_abbr, topic, tet_source_id, embedding_model
         embedding_model=embedding_model,
         classifier_model=classifier_model,
         input_docs_dir="/data/agr_document_classifier/to_classify")
-    send_classification_results(files_loaded, classifications, conf_scores, reference_curie_job_map, mod_abbr, topic, tet_source_id)
+    send_classification_results(files_loaded, classifications, conf_scores, reference_curie_job_map, mod_abbr, topic,
+                                tet_source_id)
 
 
 def prepare_classification_directory():
