@@ -203,6 +203,19 @@ def set_job_success(job):
         return False
 
 
+def set_job_failure(job):
+    url = f'https://{blue_api_base_url}/workflow_tag/job/failed/{job["reference_workflow_tag_id"]}'
+    request = urllib.request.Request(url=url, method='POST')
+    request.add_header("Content-type", "application/json")
+    request.add_header("Accept", "application/json")
+    try:
+        urllib.request.urlopen(request)
+        return True
+    except HTTPError as e:
+        logger.error(e)
+        return False
+
+
 def get_file_from_abc_reffile_obj(referencefile_json_obj):
     file_download_api = (f"https://{blue_api_base_url}/reference/referencefile/download_file/"
                          f"{referencefile_json_obj['referencefile_id']}")

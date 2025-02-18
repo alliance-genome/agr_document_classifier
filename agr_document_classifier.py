@@ -31,7 +31,7 @@ from sklearn.preprocessing import StandardScaler
 from abc_utils import get_jobs_to_classify, download_tei_files_for_references, send_classification_tag_to_abc, \
     get_cached_mod_abbreviation_from_id, \
     job_category_topic_map, set_job_success, get_tet_source_id, set_job_started, get_training_set_from_abc, \
-    upload_classification_model, download_classification_model
+    upload_classification_model, download_classification_model, set_job_failure
 from dataset_downloader import download_tei_files_from_abc_or_convert_pdf
 from models import POSSIBLE_CLASSIFIERS
 
@@ -453,6 +453,9 @@ def send_classification_results(files_loaded, classifications, conf_scores, refe
         if result:
             set_job_started(reference_curie_job_map[reference_curie])
             set_job_success(reference_curie_job_map[reference_curie])
+        else:
+            set_job_started(reference_curie_job_map[reference_curie])
+            set_job_failure(reference_curie_job_map[reference_curie])
         os.remove(file_path)
     logger.info(f"Finished processing batch of {len(files_loaded)} jobs.")
 
