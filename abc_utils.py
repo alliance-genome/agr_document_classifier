@@ -154,12 +154,13 @@ def send_classification_tag_to_abc(reference_curie: str, mod_abbreviation: str, 
         with urllib.request.urlopen(create_request) as create_response:
             if create_response.getcode() == 201:
                 logger.debug("TET created")
+                return True
             else:
                 logger.error(f"Failed to create TET: {str(tet_data)}")
+                return False
     except requests.exceptions.RequestException as e:
         logger.error(f"Error occurred during TET upload: {e}")
         return False
-    return True
 
 
 def get_jobs_to_classify(limit: int = 1000, offset: int = 0):
