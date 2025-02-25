@@ -462,9 +462,6 @@ def send_classification_results(files_loaded, classifications, conf_scores, vali
         if result:
             set_job_started(reference_curie_job_map[reference_curie])
             set_job_success(reference_curie_job_map[reference_curie])
-        else:
-            set_job_started(reference_curie_job_map[reference_curie])
-            set_job_failure(reference_curie_job_map[reference_curie])
         os.remove(file_path)
     logger.info(f"Finished processing batch of {len(files_loaded)} jobs.")
 
