@@ -8,3 +8,4 @@ htmlcov
 training_sets/*
 stats.txt
 .env.test
+/tmp/
