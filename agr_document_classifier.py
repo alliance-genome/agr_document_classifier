@@ -317,7 +317,7 @@ def classify_documents(input_docs_dir: str, embedding_model_path: str = None, cl
         doc_embedding = get_document_embedding(embedding_model, fulltext, word_to_index=word_to_index)
         X.append(doc_embedding)
         files_loaded.append(file_path)
-        valid_embeddings.append(np.all(doc_embedding == np.zeros_like(doc_embedding)))
+        valid_embeddings.append(not np.all(doc_embedding == np.zeros_like(doc_embedding)))
 
     del embedding_model
     X = np.array(X)
