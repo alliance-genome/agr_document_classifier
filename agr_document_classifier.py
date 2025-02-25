@@ -304,6 +304,7 @@ def classify_documents(input_docs_dir: str, embedding_model_path: str = None, cl
         classifier_model = joblib.load(classifier_model_path)
     X = []
     files_loaded = []
+    valid_embeddings = []
 
     documents = get_documents(input_docs_dir=input_docs_dir)
 
@@ -316,12 +317,13 @@ def classify_documents(input_docs_dir: str, embedding_model_path: str = None, cl
         doc_embedding = get_document_embedding(embedding_model, fulltext, word_to_index=word_to_index)
         X.append(doc_embedding)
         files_loaded.append(file_path)
+        valid_embeddings.append(np.all(doc_embedding == np.zeros_like(doc_embedding)))
 
     del embedding_model
     X = np.array(X)
     classifications = classifier_model.predict(X)
     confidence_scores = [classes_proba[1] for classes_proba in classifier_model.predict_proba(X)]
-    return files_loaded, classifications, confidence_scores
+    return files_loaded, classifications, confidence_scores, valid_embeddings
 
 
 def save_stats_file(stats, file_path, task_type, mod_abbreviation, topic, version_num, file_extension,
@@ -427,12 +429,12 @@ def process_job_batch(job_batch, mod_abbr, topic, tet_source_id, embedding_model
     prepare_classification_directory()
     download_tei_files_for_references(list(reference_curie_job_map.keys()),
                                       "/data/agr_document_classifier/to_classify", mod_abbr)
-    files_loaded, classifications, conf_scores = classify_documents(
+    files_loaded, classifications, conf_scores, valid_embeddings = classify_documents(
         embedding_model=embedding_model,
         classifier_model=classifier_model,
         input_docs_dir="/data/agr_document_classifier/to_classify")
-    send_classification_results(files_loaded, classifications, conf_scores, reference_curie_job_map, mod_abbr, topic,
-                                tet_source_id)
+    send_classification_results(files_loaded, classifications, conf_scores, valid_embeddings, reference_curie_job_map,
+                                mod_abbr, topic, tet_source_id)
 
 
 def prepare_classification_directory():
@@ -442,11 +444,18 @@ def prepare_classification_directory():
         os.remove(os.path.join("/data/agr_document_classifier/to_classify", file))
 
 
-def send_classification_results(files_loaded, classifications, conf_scores, reference_curie_job_map, mod_abbr, topic, tet_source_id):
+def send_classification_results(files_loaded, classifications, conf_scores, valid_embeddings, reference_curie_job_map,
+                                mod_abbr, topic, tet_source_id):
     logger.info("Sending classification tags to ABC.")
-    for file_path, classification, conf_score in zip(files_loaded, classifications, conf_scores):
-        confidence_level = get_confidence_level(classification, conf_score)
+    for file_path, classification, conf_score, valid_embedding in zip(files_loaded, classifications, conf_scores,
+                                                                      valid_embeddings):
         reference_curie = file_path.split("/")[-1].replace("_", ":")[:-4]
+        if not valid_embedding:
+            logger.warning(f"Invalid embedding for file: {file_path}. Setting job to failed.")
+            set_job_started(reference_curie_job_map[reference_curie])
+            set_job_failure(reference_curie_job_map[reference_curie])
+            continue
+        confidence_level = get_confidence_level(classification, conf_score)
         result = send_classification_tag_to_abc(reference_curie, mod_abbr, topic,
                                                 negated=bool(classification == 0),
                                                 confidence_level=confidence_level, tet_source_id=tet_source_id)
