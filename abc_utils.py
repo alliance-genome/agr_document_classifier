@@ -415,7 +415,7 @@ def create_dataset(title: str, description: str, mod_abbreviation: str, topic: s
 
 # Function to add an entry to the dataset
 def add_entry_to_dataset(mod_abbreviation: str, topic: str, dataset_type: str, version: int, reference_curie: str,
-                         positive: bool):
+                         classification_value: str):
     add_entry_url = f"https://{blue_api_base_url}/datasets/data_entry/"
     token = get_authentication_token()
     headers = generate_headers(token)
@@ -425,7 +425,7 @@ def add_entry_to_dataset(mod_abbreviation: str, topic: str, dataset_type: str, v
         "dataset_type": dataset_type,
         "version": version,
         "reference_curie": reference_curie,
-        "positive": positive
+        "classification_value": classification_value
     }
     response = requests.post(add_entry_url, json=payload, headers=headers)
     if response.status_code == 201:

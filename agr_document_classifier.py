@@ -479,8 +479,10 @@ def get_confidence_level(classification, conf_score):
 
 def download_training_set(args, training_data_dir):
     training_set = get_training_set_from_abc(mod_abbreviation=args.mod_train, topic=args.datatype_train)
-    reference_ids_positive = [agrkbid for agrkbid, positive in training_set["data_training"].items() if positive]
-    reference_ids_negative = [agrkbid for agrkbid, positive in training_set["data_training"].items() if not positive]
+    reference_ids_positive = [agrkbid for agrkbid, classification_value in training_set["data_training"].items() if
+                              classification_value == "positive"]
+    reference_ids_negative = [agrkbid for agrkbid, classification_value in training_set["data_training"].items() if
+                              classification_value == "negative"]
     shutil.rmtree(os.path.join(training_data_dir, "positive"), ignore_errors=True)
     shutil.rmtree(os.path.join(training_data_dir, "negative"), ignore_errors=True)
     os.makedirs(os.path.join(training_data_dir, "positive"), exist_ok=True)
