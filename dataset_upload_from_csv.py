@@ -23,7 +23,7 @@ def upload_dataset_from_csv(csv_file: str, title: str, description: str, mod_abb
                     logger.warning(f"Skipping invalid row: {row}")
                     continue
             add_entry_to_dataset(mod_abbreviation=mod_abbreviation, topic=topic, dataset_type="document",
-                                 version=version, reference_curie=agrkb_id, positive=positive)
+                                 version=version, reference_curie=agrkb_id, classification_value=positive)
 
 
 if __name__ == "__main__":
