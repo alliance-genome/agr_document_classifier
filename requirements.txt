@@ -32,5 +32,5 @@ tqdm==4.66.4
 wrapt==1.16.0
 xgboost==2.1.0
 git+https://github.com/alliance-genome/agr_fastapi_okta@v1.2#egg=fastapi_okta
-requests
-cachetools
+transformers~=4.45.2
+torch~=2.6.0

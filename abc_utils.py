@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import urllib.request
+from enum import Enum
 from typing import List
 from urllib.error import HTTPError
 
@@ -11,6 +12,7 @@ from cachetools import TTLCache
 from fastapi_okta.okta_utils import get_authentication_token, generate_headers
 
 blue_api_base_url = os.environ.get('ABC_API_SERVER', "literature-rest.alliancegenome.org")
+curation_api_base_url = os.environ.get('CURATION_API_SERVER', "https://curation.alliancegenome.org/api/")
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,15 @@ job_category_topic_map = {
     "RNAi": "ATP:0000082",
     "antibody": "ATP:0000096"
 }
+
+
+class EntityType(Enum):
+    GENE = 1
+    VARIATION = 2
+    SPECIES = 3
+    STRAIN = 4
+    ANTIBODY = 5
+    TRANSGENE = 6
 
 
 def get_mod_species_map():
@@ -445,3 +456,62 @@ def get_training_set_from_abc(mod_abbreviation: str, topic: str, metadata_only: 
     else:
         logger.error(f"Failed to download dataset {response.text}")
         response.raise_for_status()
+
+
+def get_entity_name(entity_type, a_team_api_search_result_obj, mod_abbreviation: str = None):
+    if entity_type == 'gene':
+        gene_name = a_team_api_search_result_obj['geneSymbol']['formatText']
+        if mod_abbreviation and mod_abbreviation == 'WB':
+            return gene_name.lower()
+        return gene_name
+    elif entity_type == 'protein':
+        # currently just for WB
+        gene_name = a_team_api_search_result_obj['geneSymbol']['formatText']
+        return gene_name.upper()
+    elif entity_type == 'allele':
+        return a_team_api_search_result_obj['alleleSymbol']['formatText']
+    elif entity_type == 'fish':
+        if a_team_api_search_result_obj['subtype']['name'] != 'fish':
+            return None
+        return a_team_api_search_result_obj['name']
+
+
+def get_all_curated_entities(mod_abbreviation: str, entity_type_str):
+    all_curated_gene_names = []
+    params = {
+        "searchFilters": {
+            "dataProviderFilter": {
+                "dataProvider.sourceOrganization.abbreviation": {
+                    "queryString": mod_abbreviation,
+                    "tokenOperator": "OR"
+                }
+            }
+        },
+        "sortOrders": [],
+        "aggregations": [],
+        "nonNullFieldsTable": []
+    }
+    current_page = 0
+    while True:
+        logger.info(f"Fetching page {current_page} of entities from A-team API")
+        url = f"{curation_api_base_url}{entity_type_str}/search?limit=2000&page={current_page}"
+        request_data_encoded = json.dumps(params).encode('utf-8')
+        request = urllib.request.Request(url, data=request_data_encoded)
+        request.add_header("Authorization", f"Bearer {get_authentication_token()}")
+        request.add_header("Content-type", "application/json")
+        request.add_header("Accept", "application/json")
+
+        with urllib.request.urlopen(request) as response:
+            resp_obj = json.loads(response.read().decode("utf8"))
+
+        if resp_obj['returnedRecords'] < 1:
+            break
+
+        for result in resp_obj['results']:
+            if result['obsolete'] or result['internal']:
+                continue
+            entity_name = get_entity_name(entity_type_str, result, mod_abbreviation)
+            if entity_name:
+                all_curated_gene_names.append(entity_name)
+        current_page += 1
+    return all_curated_gene_names
