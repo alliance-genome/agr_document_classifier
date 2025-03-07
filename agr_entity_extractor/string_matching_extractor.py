@@ -1,4 +1,3 @@
-import math
 from collections import defaultdict
 
 import torch
@@ -23,7 +22,6 @@ class AllianceStringMatchingEntityExtractor(PreTrainedModel):
                  tokenizer, entities_to_extract, match_uppercase: bool = False):
         super().__init__(config)
         self.config = config
-        self.entity_type = entity_type
         self.tfidf_threshold = tfidf_threshold
         self.match_uppercase = match_uppercase
         self.min_matches = min_matches
@@ -47,28 +45,39 @@ class AllianceStringMatchingEntityExtractor(PreTrainedModel):
         """
         batch_tokens = [self.tokenizer.convert_ids_to_tokens(seq) for seq in input_ids]
         logits_list = []
-        tfidf_vectorizer = TfidfVectorizer()
-        tfidf_vectorizer.fit([" ".join(tokens) for tokens in batch_tokens])
+        tfidf_vectorizer = TfidfVectorizer(
+            tokenizer=lambda x: x,
+            preprocessor=lambda x: x,
+            token_pattern=None
+        )
+        tfidf_vectorizer.fit(batch_tokens)
 
-        token_counters = defaultdict(int)
-
+        global_token_counts = defaultdict(int)
         for tokens in batch_tokens:
             for token in tokens:
                 if token in self.entities_to_extract:
-                    token_counters[token] += 1
+                    global_token_counts[token] += 1
 
         for tokens in batch_tokens:
-            # Initialize token-level logits: one row per token with num_labels columns.
+            # Initialize token-level logits: shape (num_tokens, num_labels).
             token_logits = torch.zeros(len(tokens), self.config.num_labels, device=input_ids.device)
+            # Get the TF-IDF values for the document.
+            doc_tfidf = tfidf_vectorizer.transform([tokens])
+            # For each token in the document...
             for i, token in enumerate(tokens):
                 if token in self.entities_to_extract:
-
-                    doc_counter = tfidf_vectorizer.vocabulary_.get(token, 0)
-                    idf = math.log(float(len(tfidf_vectorizer.vocabulary_)) / (doc_counter if doc_counter > 0 else 0.5))
-                    tfidf_score = token_counters[token] * idf
-                    if token_counters[token] >= self.min_matches and (self.tfidf_threshold <= 0 or tfidf_score >
-                                                                      self.tfidf_threshold):
+                    # Use the in-document frequency (count) for this token.
+                    token_count = global_token_counts[token]
+                    # Get the tf-idf score for this token, if it exists in the fitted vocabulary.
+                    if token in tfidf_vectorizer.vocabulary_:
+                        feature_index = tfidf_vectorizer.vocabulary_[token]
+                        tfidf_value = doc_tfidf[0, feature_index]
+                    else:
+                        tfidf_value = self.tfidf_threshold
+                    # Check if the token meets both the frequency and TF-IDF threshold criteria.
+                    if token_count >= self.min_matches and (
+                            self.tfidf_threshold <= 0 or tfidf_value > self.tfidf_threshold):
                         token_logits[i, 1] = 1.0  # Label 1 for ENTITY detected.
             logits_list.append(token_logits)
-        # Stack the logits so that the output has shape (batch_size, seq_length, num_labels)
+            # Return a tensor of shape (batch_size, seq_length, num_labels).
         return torch.stack(logits_list, dim=0)
