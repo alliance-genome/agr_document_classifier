@@ -32,7 +32,7 @@ from abc_utils import get_jobs_to_classify, download_tei_files_for_references, s
     get_cached_mod_abbreviation_from_id, \
     job_category_topic_map, set_job_success, get_tet_source_id, set_job_started, get_training_set_from_abc, \
     upload_classification_model, download_classification_model, set_job_failure
-from dataset_downloader import download_tei_files_from_abc_or_convert_pdf
+from agr_dataset_manager.dataset_downloader import download_tei_files_from_abc_or_convert_pdf
 from models import POSSIBLE_CLASSIFIERS
 
 nltk.download('stopwords')

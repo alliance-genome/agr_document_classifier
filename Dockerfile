@@ -5,11 +5,11 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 WORKDIR /usr/src/app
 ADD ./requirements.txt .
 ADD abc_utils.py .
-ADD agr_document_classifier.py .
-ADD dataset_downloader.py .
-ADD dataset_upload_from_csv.py .
+ADD agr_document_classifier/agr_document_classifier.py .
+ADD agr_dataset_manager/dataset_downloader.py .
+ADD agr_dataset_manager/dataset_upload_from_csv.py .
 ADD Makefile .
-ADD models.py .
+ADD agr_document_classifier/models.py .
 ADD crontab /etc/cron.d/agr_document_classifier_crontab
 RUN chmod 0644 /etc/cron.d/agr_document_classifier_crontab
 RUN apt-get update && apt-get install --no-install-recommends --yes build-essential git cron

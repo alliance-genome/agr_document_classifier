@@ -29,15 +29,6 @@ job_category_topic_map = {
 }
 
 
-class EntityType(Enum):
-    GENE = 1
-    VARIATION = 2
-    SPECIES = 3
-    STRAIN = 4
-    ANTIBODY = 5
-    TRANSGENE = 6
-
-
 def get_mod_species_map():
     url = f'https://{blue_api_base_url}/mod/taxons/default'
     request = urllib.request.Request(url=url)
@@ -477,11 +468,11 @@ def get_entity_name(entity_type, a_team_api_search_result_obj, mod_abbreviation:
 
 
 def get_all_curated_entities(mod_abbreviation: str, entity_type_str):
-    all_curated_gene_names = []
+    all_curated_entity_names = []
     params = {
         "searchFilters": {
             "dataProviderFilter": {
-                "dataProvider.sourceOrganization.abbreviation": {
+                "dataProvider.abbreviation": {
                     "queryString": mod_abbreviation,
                     "tokenOperator": "OR"
                 }
@@ -512,6 +503,6 @@ def get_all_curated_entities(mod_abbreviation: str, entity_type_str):
                 continue
             entity_name = get_entity_name(entity_type_str, result, mod_abbreviation)
             if entity_name:
-                all_curated_gene_names.append(entity_name)
+                all_curated_entity_names.append(entity_name)
         current_page += 1
-    return all_curated_gene_names
+    return all_curated_entity_names

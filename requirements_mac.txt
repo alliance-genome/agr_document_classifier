@@ -36,3 +36,4 @@ requests
 cachetools
 transformers~=4.45.2
 torch~=2.6.0
+pytest~=8.3.4
