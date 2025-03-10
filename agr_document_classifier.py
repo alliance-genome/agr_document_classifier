@@ -483,8 +483,14 @@ def download_training_set(args, training_data_dir):
     reference_ids_negative = [agrkbid for agrkbid, positive in training_set["data_training"].items() if not positive]
     shutil.rmtree(os.path.join(training_data_dir, "positive"), ignore_errors=True)
     shutil.rmtree(os.path.join(training_data_dir, "negative"), ignore_errors=True)
-    os.makedirs(os.path.join(training_data_dir, "positive"), exist_ok=True)
-    os.makedirs(os.path.join(training_data_dir, "negative"), exist_ok=True)
+    dir_path_positive = os.path.join(training_data_dir, "positive")
+    if not os.path.exists(dir_path_positive):  # Check if the directory exists
+        os.makedirs(dir_path_positive)  # Create only if it does not exist
+    dir_path_negative = os.path.join(training_data_dir, "negative")
+    if not os.path.exists(dir_path_negative):  # Check if the directory exists
+        os.makedirs(dir_path_negative)  # Create only if it does not exist
+    #os.makedirs(os.path.join(training_data_dir, "positive"), exist_ok=True)
+    #os.makedirs(os.path.join(training_data_dir, "negative"), exist_ok=True)
     download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference_ids_negative,
                                                output_dir=training_data_dir,
                                                mod_abbreviation=args.mod_train)

@@ -63,9 +63,9 @@ def download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference
         else:
             logger.info(f"Downloading PDF for reference {agrkb_id} as {category}")
             pdf_file_path = os.path.join(category_dir, f"{file_name}.pdf")
-            download_main_pdf(agrkb_id, mod_abbreviation, file_name, category_dir)
+            #download_main_pdf(agrkb_id, mod_abbreviation, file_name, category_dir)
             if not os.path.exists(pdf_file_path):
-                logger.error(f"Cannot find {file_name}.pdf")
+                logger.error(f"Cannot find {file_name}.pdf {pdf_file_path}")
                 continue
 
             # Convert PDF to TEI
@@ -80,12 +80,19 @@ def download_tei_files_from_abc_or_convert_pdf(reference_ids_positive, reference
                 logger.info(f"Converted {file_name}.pdf to TEI format")
             else:
                 logger.error(f"Failed to convert {file_name}.pdf to TEI. Status code: {response.status_code}")
-            os.remove(pdf_file_path)
+            #os.remove(pdf_file_path)
 
 
 def download_and_categorize_tei_files_from_csv(csv_file, output_dir, mod_abbreviation, start_agrkbid=None):
-    os.makedirs(os.path.join(output_dir, "positive"), exist_ok=True)
-    os.makedirs(os.path.join(output_dir, "negative"), exist_ok=True)
+    output_dir_positive = os.path.join(output_dir, "positive")
+    if not os.path.exists(output_dir_positive):  # Check if the directory exists
+        os.makedirs(output_dir_positive)  # Create only if it does not exist
+    output_dir_negative = os.path.join(output_dir, "negative")
+    if not os.path.exists(output_dir_negative):  # Check if the directory exists
+        os.makedirs(output_dir_negative)  # Create only if it does not exist
+
+    #os.makedirs(os.path.join(output_dir, "positive"), exist_ok=True)
+    #os.makedirs(os.path.join(output_dir, "negative"), exist_ok=True)
 
     start_processing = start_agrkbid is None
     reference_ids_positive = []

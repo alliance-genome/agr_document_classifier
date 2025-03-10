@@ -312,6 +312,7 @@ def download_tei_files_for_references(reference_curies: List[str], output_dir: s
                                 out_file.write(file_content)
         except HTTPError as e:
             logger.error(e)
+            logger.info(f"Could not download {reference_curie} from {all_reffiles_for_pap_api}")
     logger.info("Finished downloading TEI files")
 
 
